@@ -13,8 +13,17 @@
 
 ```text
 business-repo/
+├── packages/
 └── services/
 ```
+
+## 公共包
+
+跨服务复用的业务公共库放在 `packages/`。
+
+当前公共包：
+
+- `packages/money`：统一金额、币种、舍入和最小货币单位转换。
 
 ## 边界
 
