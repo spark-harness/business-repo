@@ -24,6 +24,7 @@ business-repo/
 当前公共包：
 
 - `packages/money`：统一金额、币种、舍入和最小货币单位转换。
+- `packages/spring-starter`：Spring Boot 干净架构公共 starter，提供分层 stereotype 和事务执行抽象。
 
 ## 边界
 

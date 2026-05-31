@@ -6,6 +6,8 @@
 
 ```text
 services/
+├── backend/
+│   └── user-api/
 ├── order-api/
 └── order-worker/
 ```
