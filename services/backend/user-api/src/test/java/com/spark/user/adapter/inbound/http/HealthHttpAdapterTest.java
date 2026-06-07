@@ -24,4 +24,12 @@ class HealthHttpAdapterTest {
                 .andExpect(jsonPath("$.status").value("UP"))
                 .andExpect(jsonPath("$.service").value("user-api"));
     }
+
+    @Test
+    void ready_whenCalled_shouldReturnReadinessStatus() throws Exception {
+        mockMvc.perform(get("/ready"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("READY"))
+                .andExpect(jsonPath("$.service").value("user-api"));
+    }
 }
