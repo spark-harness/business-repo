@@ -12,4 +12,9 @@ public class HealthHttpAdapter {
     public Map<String, String> health() {
         return Map.of("status", "UP", "service", "user-api");
     }
+
+    @GetMapping("/ready")
+    public Map<String, String> ready() {
+        return Map.of("status", "READY", "service", "user-api");
+    }
 }
