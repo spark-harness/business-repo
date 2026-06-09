@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @InfrastructureAdapter
 public class InMemoryUserRepository implements UserRepository {
     private final Map<String, UserAccount> usersByMobile = new ConcurrentHashMap<>();
+    private final Map<String, UserAccount> usersById = new ConcurrentHashMap<>();
 
     @Override
     public RegisterOrLoginOutcome findOrCreateByMobile(String mobile) {
@@ -18,11 +19,23 @@ public class InMemoryUserRepository implements UserRepository {
             return new RegisterOrLoginOutcome(existing, false);
         }
 
-        UserAccount created = new UserAccount("user_" + UUID.randomUUID(), mobile);
+        UserAccount created = new UserAccount("user_" + UUID.randomUUID(), mobile, "");
         UserAccount previous = usersByMobile.putIfAbsent(mobile, created);
         if (previous != null) {
             return new RegisterOrLoginOutcome(previous, false);
         }
+        usersById.put(created.userId(), created);
         return new RegisterOrLoginOutcome(created, true);
+    }
+
+    @Override
+    public UserAccount updateUsername(String userId, String username) {
+        UserAccount updated = usersById.computeIfPresent(
+                userId,
+                (ignored, existing) -> new UserAccount(existing.userId(), existing.mobile(), username));
+        if (updated != null) {
+            usersByMobile.put(updated.mobile(), updated);
+        }
+        return updated;
     }
 }
