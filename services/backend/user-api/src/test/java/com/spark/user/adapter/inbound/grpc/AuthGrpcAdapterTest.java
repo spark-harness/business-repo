@@ -21,6 +21,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class AuthGrpcAdapterTest {
+    private InMemoryUserRepository userRepository;
+    private RegisterOrLoginUseCase useCase;
     private io.grpc.Server server;
     private ManagedChannel channel;
     private AuthServiceGrpc.AuthServiceBlockingStub stub;
@@ -28,8 +30,8 @@ class AuthGrpcAdapterTest {
     @BeforeEach
     void setUp() throws IOException {
         String serverName = "auth-test-" + UUID.randomUUID();
-        RegisterOrLoginUseCase useCase =
-                new RegisterOrLoginUseCase(new InMemoryUserRepository(), new FixedVerificationCodeVerifier());
+        userRepository = new InMemoryUserRepository();
+        useCase = new RegisterOrLoginUseCase(userRepository, new FixedVerificationCodeVerifier());
         server = InProcessServerBuilder.forName(serverName)
                 .directExecutor()
                 .addService(new AuthGrpcAdapter(useCase))
@@ -101,5 +103,20 @@ class AuthGrpcAdapterTest {
                 .isInstanceOf(StatusRuntimeException.class)
                 .extracting(error -> ((StatusRuntimeException) error).getStatus().getCode())
                 .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void registerOrLoginByMobileCode_whenUserIsDisabled_shouldReturnPermissionDenied() {
+        RegisterOrLoginByMobileCodeRequest request = RegisterOrLoginByMobileCodeRequest.newBuilder()
+                .setMobile("13800138000")
+                .setVerificationCode("123456")
+                .build();
+        RegisterOrLoginByMobileCodeResponse user = stub.registerOrLoginByMobileCode(request);
+        userRepository.updateEnabled(user.getUserId(), false);
+
+        assertThatThrownBy(() -> stub.registerOrLoginByMobileCode(request))
+                .isInstanceOf(StatusRuntimeException.class)
+                .extracting(error -> ((StatusRuntimeException) error).getStatus().getCode())
+                .isEqualTo(Status.Code.PERMISSION_DENIED);
     }
 }

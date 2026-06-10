@@ -5,6 +5,7 @@ import com.spark.user.application.auth.InvalidAuthRequestException;
 import com.spark.user.application.auth.RegisterOrLoginCommand;
 import com.spark.user.application.auth.RegisterOrLoginResult;
 import com.spark.user.application.auth.RegisterOrLoginUseCase;
+import com.spark.user.application.auth.UserLoginDisabledException;
 import com.vesta.spark.user.v1.AuthServiceGrpc;
 import com.vesta.spark.user.v1.RegisterOrLoginByMobileCodeRequest;
 import com.vesta.spark.user.v1.RegisterOrLoginByMobileCodeResponse;
@@ -34,6 +35,9 @@ public class AuthGrpcAdapter extends AuthServiceGrpc.AuthServiceImplBase {
         } catch (InvalidAuthRequestException error) {
             responseObserver.onError(
                     Status.INVALID_ARGUMENT.withDescription(error.getMessage()).asRuntimeException());
+        } catch (UserLoginDisabledException error) {
+            responseObserver.onError(
+                    Status.PERMISSION_DENIED.withDescription(error.getMessage()).asRuntimeException());
         }
     }
 }

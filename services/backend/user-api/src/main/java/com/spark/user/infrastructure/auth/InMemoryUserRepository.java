@@ -19,7 +19,7 @@ public class InMemoryUserRepository implements UserRepository {
             return new RegisterOrLoginOutcome(existing, false);
         }
 
-        UserAccount created = new UserAccount("user_" + UUID.randomUUID(), mobile, "");
+        UserAccount created = new UserAccount("user_" + UUID.randomUUID(), mobile, "", true);
         UserAccount previous = usersByMobile.putIfAbsent(mobile, created);
         if (previous != null) {
             return new RegisterOrLoginOutcome(previous, false);
@@ -32,7 +32,18 @@ public class InMemoryUserRepository implements UserRepository {
     public UserAccount updateUsername(String userId, String username) {
         UserAccount updated = usersById.computeIfPresent(
                 userId,
-                (ignored, existing) -> new UserAccount(existing.userId(), existing.mobile(), username));
+                (ignored, existing) -> new UserAccount(existing.userId(), existing.mobile(), username, existing.enabled()));
+        if (updated != null) {
+            usersByMobile.put(updated.mobile(), updated);
+        }
+        return updated;
+    }
+
+    @Override
+    public UserAccount updateEnabled(String userId, boolean enabled) {
+        UserAccount updated = usersById.computeIfPresent(
+                userId,
+                (ignored, existing) -> new UserAccount(existing.userId(), existing.mobile(), existing.username(), enabled));
         if (updated != null) {
             usersByMobile.put(updated.mobile(), updated);
         }

@@ -6,10 +6,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.spark.user.application.auth.RegisterOrLoginCommand;
 import com.spark.user.application.auth.RegisterOrLoginResult;
 import com.spark.user.application.auth.RegisterOrLoginUseCase;
+import com.spark.user.application.profile.SetUserEnabledUseCase;
 import com.spark.user.application.profile.UpdateUsernameUseCase;
 import com.spark.user.infrastructure.auth.FixedVerificationCodeVerifier;
 import com.spark.user.infrastructure.auth.InMemoryUserRepository;
+import com.vesta.spark.user.v1.DisableUserRequest;
+import com.vesta.spark.user.v1.DisableUserResponse;
 import com.vesta.spark.user.v1.ProfileServiceGrpc;
+import com.vesta.spark.user.v1.RestoreUserRequest;
+import com.vesta.spark.user.v1.RestoreUserResponse;
 import com.vesta.spark.user.v1.UpdateUsernameRequest;
 import com.vesta.spark.user.v1.UpdateUsernameResponse;
 import io.grpc.ManagedChannel;
@@ -36,9 +41,10 @@ class ProfileGrpcAdapterTest {
         registerOrLoginUseCase =
                 new RegisterOrLoginUseCase(userRepository, new FixedVerificationCodeVerifier());
         UpdateUsernameUseCase updateUsernameUseCase = new UpdateUsernameUseCase(userRepository);
+        SetUserEnabledUseCase setUserEnabledUseCase = new SetUserEnabledUseCase(userRepository);
         server = InProcessServerBuilder.forName(serverName)
                 .directExecutor()
-                .addService(new ProfileGrpcAdapter(updateUsernameUseCase))
+                .addService(new ProfileGrpcAdapter(updateUsernameUseCase, setUserEnabledUseCase))
                 .build()
                 .start();
         channel = InProcessChannelBuilder.forName(serverName)
@@ -94,6 +100,57 @@ class ProfileGrpcAdapterTest {
                 .build();
 
         assertThatThrownBy(() -> stub.updateUsername(request))
+                .isInstanceOf(StatusRuntimeException.class)
+                .extracting(error -> ((StatusRuntimeException) error).getStatus().getCode())
+                .isEqualTo(Status.Code.NOT_FOUND);
+    }
+
+    @Test
+    void disableUser_whenUserExists_shouldReturnDisabledStatus() {
+        RegisterOrLoginResult user = registerOrLoginUseCase.registerOrLogin(
+                new RegisterOrLoginCommand("13800138000", "123456"));
+
+        DisableUserResponse response = stub.disableUser(DisableUserRequest.newBuilder()
+                .setUserId(user.userId())
+                .build());
+
+        assertThat(response.getUserId()).isEqualTo(user.userId());
+        assertThat(response.getEnabled()).isFalse();
+    }
+
+    @Test
+    void restoreUser_whenUserExists_shouldReturnEnabledStatus() {
+        RegisterOrLoginResult user = registerOrLoginUseCase.registerOrLogin(
+                new RegisterOrLoginCommand("13800138000", "123456"));
+        stub.disableUser(DisableUserRequest.newBuilder().setUserId(user.userId()).build());
+
+        RestoreUserResponse response = stub.restoreUser(RestoreUserRequest.newBuilder()
+                .setUserId(user.userId())
+                .build());
+
+        assertThat(response.getUserId()).isEqualTo(user.userId());
+        assertThat(response.getEnabled()).isTrue();
+    }
+
+    @Test
+    void disableUser_whenUserIdIsBlank_shouldReturnInvalidArgument() {
+        DisableUserRequest request = DisableUserRequest.newBuilder()
+                .setUserId("   ")
+                .build();
+
+        assertThatThrownBy(() -> stub.disableUser(request))
+                .isInstanceOf(StatusRuntimeException.class)
+                .extracting(error -> ((StatusRuntimeException) error).getStatus().getCode())
+                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void restoreUser_whenUserDoesNotExist_shouldReturnNotFound() {
+        RestoreUserRequest request = RestoreUserRequest.newBuilder()
+                .setUserId("user_missing")
+                .build();
+
+        assertThatThrownBy(() -> stub.restoreUser(request))
                 .isInstanceOf(StatusRuntimeException.class)
                 .extracting(error -> ((StatusRuntimeException) error).getStatus().getCode())
                 .isEqualTo(Status.Code.NOT_FOUND);

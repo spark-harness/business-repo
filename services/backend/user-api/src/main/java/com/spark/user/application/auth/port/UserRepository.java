@@ -7,5 +7,7 @@ public interface UserRepository {
 
     UserAccount updateUsername(String userId, String username);
 
+    UserAccount updateEnabled(String userId, boolean enabled);
+
     record RegisterOrLoginOutcome(UserAccount user, boolean newUser) {}
 }

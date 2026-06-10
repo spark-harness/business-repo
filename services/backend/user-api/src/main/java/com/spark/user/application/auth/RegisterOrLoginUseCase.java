@@ -36,6 +36,9 @@ public class RegisterOrLoginUseCase {
 
         UserRepository.RegisterOrLoginOutcome outcome = userRepository.findOrCreateByMobile(mobile);
         UserAccount user = outcome.user();
+        if (!user.enabled()) {
+            throw new UserLoginDisabledException("user login is disabled");
+        }
         return new RegisterOrLoginResult(user.userId(), outcome.newUser());
     }
 
