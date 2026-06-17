@@ -18,9 +18,6 @@ defaults:
   run:
     working-directory: services/backend/user-api
 
-env:
-  MAVEN_GITHUB_TOKEN: ${{ secrets.BRANCH_COHERENCE_TOKEN || github.token }}
-
 jobs:
   test:
     name: Maven test
@@ -29,15 +26,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout generated Java contracts
+        uses: actions/checkout@v4
+        with:
+          repository: spark-harness/idl-java-repo
+          path: .idl-java-repo
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
-          server-id: github
-          server-username: GITHUB_ACTOR
-          server-password: MAVEN_GITHUB_TOKEN
+
+      - name: Install generated Java contracts
+        working-directory: .idl-java-repo
+        run: mvn -B install -DskipTests
+
+      - name: Install Spring clean architecture starter
+        working-directory: packages/spring-starter
+        run: mvn -B install -DskipTests
 
       - name: Run tests
         run: mvn test
