@@ -31,6 +31,7 @@ jobs:
         with:
           repository: spark-harness/idl-java-repo
           path: .idl-java-repo
+          token: ${{ secrets.BRANCH_COHERENCE_TOKEN || github.token }}
 
       - name: Setup Java
         uses: actions/setup-java@v4
