@@ -56,7 +56,7 @@ jobs:
           cache-dependency-path: services/backend/fides-bff/go.sum
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.11.4
           working-directory: services/backend/fides-bff
