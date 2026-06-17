@@ -42,13 +42,24 @@ jobs:
             impact_json="$(gh api "repos/$HARNESS_REPOSITORY/contents/requirements/$requirement_id/impact-analysis.md?ref=$encoded_branch" 2>/dev/null || true)"
             if [ -n "$impact_json" ]; then
               impact_content="$(jq -r '.content' <<<"$impact_json" | base64 --decode)"
-              idl_impact="$(IMPACT_CONTENT="$impact_content" python3 -c 'import os, re; text=os.environ["IMPACT_CONTENT"]; patterns=[r"(?im)^idl_impact:\s*\"?([^\"\n]+)", r"(?im)^-\s*Does this change involve protobuf IDL or external contracts:\s*\**\s*([^。\n*]+)"]; value="";
-              for pattern in patterns:
-                  match=re.search(pattern, text)
-                  if match:
-                      value=match.group(1).strip().lower()
-                      break
-              print(value)')"
+              idl_impact="$(IMPACT_CONTENT="$impact_content" python3 <<'PY'
+import os
+import re
+
+text = os.environ["IMPACT_CONTENT"]
+patterns = [
+    r"(?im)^idl_impact:\s*\"?([^\"\n]+)",
+    r"(?im)^-\s*Does this change involve protobuf IDL or external contracts:\s*\**\s*([^。\n*]+)",
+]
+value = ""
+for pattern in patterns:
+    match = re.search(pattern, text)
+    if match:
+        value = match.group(1).strip().lower()
+        break
+print(value)
+PY
+              )"
 
               if [ "$idl_impact" = "yes" ]; then
                 required_repositories="$required_repositories $IDL_REPOSITORY"
