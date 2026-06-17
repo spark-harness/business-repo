@@ -6,9 +6,12 @@
 package main
 
 import (
+	"time"
+
 	"github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/wire"
+	"github.com/spark/bffkit"
 
 	"github.com/spark/fides-bff/internal/biz"
 	"github.com/spark/fides-bff/internal/conf"
@@ -26,7 +29,12 @@ func wireApp(*conf.Server, biz.Version, log.Logger) (*kratos.App, func(), error)
 	panic(wire.Build(
 		biz.NewHealthUsecase,
 		service.NewHealthService,
+		newIdempotencyStore,
 		server.NewHTTPServer,
 		newApp,
 	))
+}
+
+func newIdempotencyStore() bffkit.IdempotencyStore {
+	return bffkit.NewMemoryIdempotencyStore(24 * time.Hour)
 }
