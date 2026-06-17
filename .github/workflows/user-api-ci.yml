@@ -18,6 +18,9 @@ defaults:
   run:
     working-directory: services/backend/user-api
 
+env:
+  MAVEN_GITHUB_TOKEN: ${{ secrets.BRANCH_COHERENCE_TOKEN || github.token }}
+
 jobs:
   test:
     name: Maven test
@@ -32,6 +35,9 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: MAVEN_GITHUB_TOKEN
 
       - name: Run tests
         run: mvn test
