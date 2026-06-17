@@ -1,0 +1,76 @@
+name: branch-coherence
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HARNESS_REPOSITORY: "spark-harness/harness-repo"
+  IDL_REPOSITORY: "spark-harness/idl-repo"
+
+jobs:
+  branch-coherence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check same branch in required peer repositories
+        shell: bash
+        env:
+          CURRENT_BRANCH: ${{ github.head_ref || github.ref_name }}
+          GH_TOKEN: ${{ secrets.BRANCH_COHERENCE_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$CURRENT_BRANCH" ]; then
+            echo "::error::Cannot resolve current branch from GitHub context."
+            exit 1
+          fi
+
+          requirement_id="$(grep -Eo '[A-Z][A-Z0-9]*-[0-9]+' <<<"$CURRENT_BRANCH" | tail -n 1 || true)"
+
+          encoded_branch="$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["CURRENT_BRANCH"], safe=""))')"
+
+          missing=0
+          required_repositories="$HARNESS_REPOSITORY"
+
+          if [ -n "$requirement_id" ]; then
+            impact_json="$(gh api "repos/$HARNESS_REPOSITORY/contents/requirements/$requirement_id/impact-analysis.md?ref=$encoded_branch" 2>/dev/null || true)"
+            if [ -n "$impact_json" ]; then
+              impact_content="$(jq -r '.content' <<<"$impact_json" | base64 --decode)"
+              idl_impact="$(IMPACT_CONTENT="$impact_content" python3 -c 'import os, re; text=os.environ["IMPACT_CONTENT"]; patterns=[r"(?im)^idl_impact:\s*\"?([^\"\n]+)", r"(?im)^-\s*Does this change involve protobuf IDL or external contracts:\s*\**\s*([^。\n*]+)"]; value="";
+              for pattern in patterns:
+                  match=re.search(pattern, text)
+                  if match:
+                      value=match.group(1).strip().lower()
+                      break
+              print(value)')"
+
+              if [ "$idl_impact" = "yes" ]; then
+                required_repositories="$required_repositories $IDL_REPOSITORY"
+              else
+                echo "IDL peer branch not required by harness-repo requirements/$requirement_id/impact-analysis.md."
+              fi
+            else
+              echo "::error title=Cannot determine required repositories::Cannot read harness-repo requirements/$requirement_id/impact-analysis.md on branch $CURRENT_BRANCH."
+              missing=1
+            fi
+          else
+            echo "::warning::No requirement id found in branch $CURRENT_BRANCH; only harness branch existence will be checked."
+          fi
+
+          for repo in $required_repositories; do
+            echo "Checking $repo branch $CURRENT_BRANCH"
+            if gh api --silent "repos/$repo/branches/$encoded_branch"; then
+              echo "$repo has branch $CURRENT_BRANCH"
+            else
+              echo "::error title=Missing same-named branch::$repo does not have accessible branch $CURRENT_BRANCH"
+              missing=1
+            fi
+          done
+
+          exit "$missing"
