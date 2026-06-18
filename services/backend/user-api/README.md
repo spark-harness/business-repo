@@ -1,6 +1,8 @@
 # user-api
 
-`user-api` 是 Spring Boot 后端服务，使用团队后端干净架构目录。
+`user-api` 是 Java 21 + Spring Boot 后端服务，使用团队后端干净架构目录。
+
+先说不是什么：它不是 fides-bff，也不是某个业务接口的一次性实现目录。它是后续后端业务票的服务骨架，业务规则应按领域和用例继续落在清晰分层内。
 
 ## 目录
 
@@ -20,6 +22,14 @@ src/main/java/com/spark/user/
 - `adapter/inbound`：HTTP、RPC、消息消费和定时任务入口。
 - `infrastructure`：数据库、消息、缓存、第三方 client 等出站实现。
 - `bootstrap`：Spring Boot 启动和装配入口。
+
+后续业务票落点：
+
+- 领域实体和值对象放在 `domain/{subdomain}`。
+- 用例、命令、结果和出站端口放在 `application/{subdomain}`。
+- gRPC、HTTP、消息和定时任务入口放在 `adapter/inbound`。
+- repository、外部 client、缓存和消息 producer 实现放在 `infrastructure`。
+- Spring Boot 启动和装配入口只放在 `bootstrap`。
 
 ## 本地运行
 
@@ -73,3 +83,9 @@ gRPC ping 契约：
 ```bash
 mvn test
 ```
+
+测试入口包含：
+
+- Spring Boot 启动与 `/actuator/health` smoke test。
+- gRPC adapter/use case 单元测试。
+- ArchUnit 架构边界测试，阻止 `domain` 依赖 Spring、Web、数据库、消息或外部 SDK。

@@ -1,0 +1,72 @@
+name: user-api-ci
+
+on:
+  push:
+    paths:
+      - "services/backend/user-api/**"
+      - ".github/workflows/user-api-ci.yml"
+  pull_request:
+    paths:
+      - "services/backend/user-api/**"
+      - ".github/workflows/user-api-ci.yml"
+
+permissions:
+  contents: read
+  packages: read
+
+defaults:
+  run:
+    working-directory: services/backend/user-api
+
+jobs:
+  test:
+    name: Maven test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create idl-java-repo app token
+        id: idl-java-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.IDL_JAVA_READER_APP_ID }}
+          private-key: ${{ secrets.IDL_JAVA_READER_APP_PRIVATE_KEY }}
+          owner: spark-harness
+          repositories: idl-java-repo
+          permission-contents: read
+          permission-packages: read
+
+      - name: Checkout generated Java contracts
+        uses: actions/checkout@v4
+        with:
+          repository: spark-harness/idl-java-repo
+          path: .idl-java-repo
+          token: ${{ steps.idl-java-token.outputs.token }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Install generated Java contracts
+        working-directory: .idl-java-repo
+        env:
+          GITHUB_TOKEN: ${{ steps.idl-java-token.outputs.token }}
+        run: mvn -B install -DskipTests
+
+      - name: Install Spring clean architecture starter
+        working-directory: packages/spring-starter
+        env:
+          GITHUB_TOKEN: ${{ steps.idl-java-token.outputs.token }}
+        run: mvn -B install -DskipTests
+
+      - name: Run tests
+        env:
+          GITHUB_TOKEN: ${{ steps.idl-java-token.outputs.token }}
+        run: mvn test
