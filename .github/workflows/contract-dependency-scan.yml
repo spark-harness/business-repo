@@ -16,11 +16,11 @@ on:
       mode:
         description: "Scan mode"
         required: true
-        default: "rc"
+        default: "rc-or-formal"
         type: choice
         options:
-          - rc
-          - master
+          - rc-or-formal
+          - formal-only
 
 permissions:
   contents: read
@@ -40,7 +40,7 @@ jobs:
 
       - name: Run contract dependency scan
         env:
-          SCAN_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'master' }}
+          SCAN_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'rc-or-formal' }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
           HEAD_SHA: ${{ github.sha }}
         shell: bash

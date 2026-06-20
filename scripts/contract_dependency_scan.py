@@ -106,16 +106,27 @@ def classify_go_version(version):
     return "branch_or_unclassified"
 
 
+def normalize_mode(mode):
+    aliases = {
+        "rc": "rc-or-formal",
+        "master": "formal-only",
+    }
+    return aliases.get(mode, mode)
+
+
 def violation_for_stage(file_path, dependency, version, stage, mode, language):
+    original_mode = mode
+    mode = normalize_mode(mode)
     if stage == "snapshot":
         return Violation(file_path, dependency, version, "snapshot_not_allowed", "Contract SNAPSHOT dependencies are not allowed in CI gates.")
     if language == "go" and stage == "pseudo":
         return Violation(file_path, dependency, version, "go_pseudo_version_not_allowed", "Go pseudo-versions are development dependencies.")
-    if mode == "master":
+    if mode == "formal-only":
         if stage != "formal":
-            return Violation(file_path, dependency, version, "master_requires_formal", "Master-bound changes may consume only formal contract versions.")
+            rule = "formal_only_requires_formal" if original_mode == "formal-only" else "master_requires_formal"
+            return Violation(file_path, dependency, version, rule, "Release-bound changes may consume only formal contract versions.")
         return None
-    if mode == "rc":
+    if mode == "rc-or-formal":
         if stage not in {"formal", "rc"}:
             return Violation(file_path, dependency, version, "rc_requires_immutable_rc_or_formal", "RC gate requires a formal version or immutable RC version.")
         return None
@@ -302,7 +313,7 @@ def scan(root, config, mode, selected_paths=None):
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="Scan contract dependency versions.")
-    parser.add_argument("--mode", choices=["master", "rc"], required=True)
+    parser.add_argument("--mode", choices=["master", "rc", "formal-only", "rc-or-formal"], required=True)
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--config", type=Path, default=Path("config/contract-dependencies.json"))
     parser.add_argument("--path", action="append", default=[], type=Path, help="Changed file to scan. go.sum maps to sibling go.mod. May be repeated.")
