@@ -1,0 +1,16 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>example</groupId>
+  <artifactId>java-rc-pass</artifactId>
+  <version>1.0.0</version>
+  <properties>
+    <contract.version>1.8.0-rc.LEN-36.20260620.a1b2c3d</contract.version>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>com.spark.contract</groupId>
+      <artifactId>spark-idl-java</artifactId>
+      <version>${contract.version}</version>
+    </dependency>
+  </dependencies>
+</project>

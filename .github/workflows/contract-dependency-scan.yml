@@ -1,0 +1,66 @@
+name: contract-dependency-scan
+
+on:
+  pull_request:
+    paths:
+      - "**/pom.xml"
+      - "**/go.mod"
+      - "**/go.sum"
+      - "config/contract-dependencies.json"
+      - "scripts/contract_dependency_scan.py"
+      - "tests/contract_dependency_scan/**"
+      - "tests/test_contract_dependency_scan.py"
+      - ".github/workflows/contract-dependency-scan.yml"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Scan mode"
+        required: true
+        default: "rc"
+        type: choice
+        options:
+          - rc
+          - master
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Contract dependency scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run scanner tests
+        run: python3 -m unittest tests/test_contract_dependency_scan.py
+
+      - name: Run contract dependency scan
+        env:
+          SCAN_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'master' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          HEAD_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -n "$BASE_SHA" ]; then
+            mapfile -t changed_files < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          else
+            python3 scripts/contract_dependency_scan.py --mode "$SCAN_MODE"
+            exit 0
+          fi
+
+          args=()
+          for file in "${changed_files[@]}"; do
+            case "$file" in
+              *pom.xml|*go.mod|*go.sum)
+                args+=(--path "$file")
+                ;;
+            esac
+          done
+
+          python3 scripts/contract_dependency_scan.py --mode "$SCAN_MODE" "${args[@]}"
