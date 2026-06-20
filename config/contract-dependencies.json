@@ -1,0 +1,13 @@
+{
+  "maven": [
+    {
+      "groupId": "com.spark.contract",
+      "artifactId": "spark-idl-java"
+    }
+  ],
+  "go": [
+    {
+      "modulePrefix": "github.com/spark-harness/idl-go-repo/"
+    }
+  ]
+}
