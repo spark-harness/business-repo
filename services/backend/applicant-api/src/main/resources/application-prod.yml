@@ -1,0 +1,20 @@
+management:
+  health:
+    redis:
+      enabled: true
+
+spark:
+  applicant:
+    auth:
+      runtime-store: redis-jdbc
+      otp-provider: disabled
+      token-mode: hmac
+      jdbc-url: ${APPLICANT_DB_URL:}
+      jdbc-username: ${APPLICANT_DB_USERNAME:}
+      jdbc-password: ${APPLICANT_DB_PASSWORD:}
+      token-secret: ${APPLICANT_TOKEN_SECRET:}
+
+spring:
+  data:
+    redis:
+      timeout: 2s

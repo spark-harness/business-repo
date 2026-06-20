@@ -1,0 +1,11 @@
+management:
+  health:
+    redis:
+      enabled: false
+
+spark:
+  applicant:
+    auth:
+      runtime-store: in-memory
+      otp-provider: test
+      token-mode: simple
