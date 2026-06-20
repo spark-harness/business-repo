@@ -1,0 +1,152 @@
+package com.spark.applicant.adapter.inbound.grpc;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.spark.applicant.application.auth.AuthPolicy;
+import com.spark.applicant.application.auth.RefreshTokenUseCase;
+import com.spark.applicant.application.auth.SendOtpUseCase;
+import com.spark.applicant.application.auth.VerifyOtpUseCase;
+import com.spark.applicant.infrastructure.auth.InMemoryApplicantRepository;
+import com.spark.applicant.infrastructure.auth.InMemoryIdempotencyRepository;
+import com.spark.applicant.infrastructure.auth.InMemoryOtpChallengeRepository;
+import com.spark.applicant.infrastructure.auth.InMemorySessionTokenStore;
+import com.spark.applicant.infrastructure.auth.SimpleTokenService;
+import com.spark.applicant.infrastructure.auth.TestSmsCodeSender;
+import com.vesta.spark.applicant.v1.ApplicantAuthServiceGrpc;
+import com.vesta.spark.applicant.v1.RefreshTokenRequest;
+import com.vesta.spark.applicant.v1.SendOtpRequest;
+import com.vesta.spark.applicant.v1.SendOtpResponse;
+import com.vesta.spark.applicant.v1.VerifyOtpRequest;
+import com.vesta.spark.applicant.v1.VerifyOtpResponse;
+import io.grpc.ManagedChannel;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.io.IOException;
+import java.time.Clock;
+import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+class ApplicantAuthGrpcAdapterTest {
+    private io.grpc.Server server;
+    private ManagedChannel channel;
+    private ApplicantAuthServiceGrpc.ApplicantAuthServiceBlockingStub stub;
+
+    @BeforeEach
+    void setUp() throws IOException {
+        String serverName = "applicant-auth-test-" + UUID.randomUUID();
+        Clock clock = Clock.systemUTC();
+        AuthPolicy policy = AuthPolicy.defaults();
+        InMemoryOtpChallengeRepository otpRepository = new InMemoryOtpChallengeRepository(clock);
+        InMemoryIdempotencyRepository idempotencyRepository = new InMemoryIdempotencyRepository(clock);
+        InMemorySessionTokenStore tokenStore = new InMemorySessionTokenStore(clock);
+        SimpleTokenService tokenService = new SimpleTokenService(clock);
+        SendOtpUseCase sendOtpUseCase = new SendOtpUseCase(
+                otpRepository, idempotencyRepository, new TestSmsCodeSender("123456"), policy, clock);
+        VerifyOtpUseCase verifyOtpUseCase = new VerifyOtpUseCase(
+                otpRepository,
+                new InMemoryApplicantRepository(clock),
+                tokenStore,
+                idempotencyRepository,
+                tokenService,
+                policy,
+                clock);
+        RefreshTokenUseCase refreshTokenUseCase =
+                new RefreshTokenUseCase(tokenStore, idempotencyRepository, tokenService, policy, clock);
+
+        server = InProcessServerBuilder.forName(serverName)
+                .directExecutor()
+                .addService(new ApplicantAuthGrpcAdapter(
+                        sendOtpUseCase, verifyOtpUseCase, refreshTokenUseCase, new SimpleMeterRegistry()))
+                .build()
+                .start();
+        channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
+        stub = ApplicantAuthServiceGrpc.newBlockingStub(channel);
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (channel != null) {
+            channel.shutdownNow();
+        }
+        if (server != null) {
+            server.shutdownNow();
+        }
+    }
+
+    @Test
+    void sendOtp_whenRequestIsValid_shouldReturnChallenge() {
+        SendOtpResponse response = stub.sendOtp(SendOtpRequest.newBuilder()
+                .setCountryCode("+852")
+                .setPhone("91234567")
+                .setIdempotencyKey("idem-send-1")
+                .build());
+
+        assertThat(response.getChallengeId()).isNotBlank();
+        assertThat(response.getExpiresInSec()).isEqualTo(300);
+        assertThat(response.getResendAfterSec()).isEqualTo(60);
+    }
+
+    @Test
+    void sendOtp_whenCountryIsUnsupported_shouldReturnInvalidArgument() {
+        SendOtpRequest request = SendOtpRequest.newBuilder()
+                .setCountryCode("+86")
+                .setPhone("13800138000")
+                .setIdempotencyKey("idem-send-1")
+                .build();
+
+        assertThatThrownBy(() -> stub.sendOtp(request))
+                .isInstanceOf(StatusRuntimeException.class)
+                .extracting(error -> ((StatusRuntimeException) error).getStatus().getCode())
+                .isEqualTo(Status.Code.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void verifyOtp_whenCodeIsCorrect_shouldReturnTokens() {
+        SendOtpResponse challenge = stub.sendOtp(SendOtpRequest.newBuilder()
+                .setCountryCode("+852")
+                .setPhone("91234567")
+                .setIdempotencyKey("idem-send-1")
+                .build());
+
+        VerifyOtpResponse response = stub.verifyOtp(VerifyOtpRequest.newBuilder()
+                .setChallengeId(challenge.getChallengeId())
+                .setCode("123456")
+                .setIdempotencyKey("idem-verify-1")
+                .build());
+
+        assertThat(response.getApplicantId()).startsWith("applicant_");
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        assertThat(response.getExpiresInSec()).isEqualTo(3600);
+        assertThat(response.getRefreshExpiresInSec()).isEqualTo(3600);
+    }
+
+    @Test
+    void refreshToken_whenRefreshTokenIsValid_shouldReturnAccessToken() {
+        SendOtpResponse challenge = stub.sendOtp(SendOtpRequest.newBuilder()
+                .setCountryCode("+852")
+                .setPhone("91234567")
+                .setIdempotencyKey("idem-send-1")
+                .build());
+        VerifyOtpResponse login = stub.verifyOtp(VerifyOtpRequest.newBuilder()
+                .setChallengeId(challenge.getChallengeId())
+                .setCode("123456")
+                .setIdempotencyKey("idem-verify-1")
+                .build());
+
+        String accessToken = stub.refreshToken(RefreshTokenRequest.newBuilder()
+                        .setRefreshToken(login.getRefreshToken())
+                        .setIdempotencyKey("idem-refresh-1")
+                        .build())
+                .getAccessToken();
+
+        assertThat(accessToken).isNotBlank();
+        assertThat(accessToken).isNotEqualTo(login.getAccessToken());
+    }
+}
