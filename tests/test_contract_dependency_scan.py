@@ -73,8 +73,14 @@ class ContractDependencyScanTest(unittest.TestCase):
     def test_java_rc_passes_in_rc_mode(self):
         self.assert_scan_passes("java-rc-pass", "rc")
 
+    def test_java_rc_passes_in_rc_or_formal_mode(self):
+        self.assert_scan_passes("java-rc-pass", "rc-or-formal")
+
     def test_java_rc_fails_in_master_mode(self):
         self.assert_scan_fails("java-rc-pass", "master", "master_requires_formal")
+
+    def test_java_rc_fails_in_formal_only_mode(self):
+        self.assert_scan_fails("java-rc-pass", "formal-only", "formal_only_requires_formal")
 
     def test_java_invalid_rc_fails_in_rc_mode(self):
         self.assert_scan_fails("java-rc-invalid-fail", "rc", "rc_requires_immutable_rc_or_formal")
@@ -87,6 +93,9 @@ class ContractDependencyScanTest(unittest.TestCase):
 
     def test_go_rc_passes_in_rc_mode(self):
         self.assert_scan_passes("go-rc-pass", "rc")
+
+    def test_go_rc_passes_in_rc_or_formal_mode(self):
+        self.assert_scan_passes("go-rc-pass", "rc-or-formal")
 
     def test_go_rc_fails_in_master_mode(self):
         self.assert_scan_fails("go-rc-pass", "master", "master_requires_formal")
