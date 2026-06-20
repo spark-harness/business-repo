@@ -63,4 +63,9 @@ jobs:
             esac
           done
 
+          if [ "${#args[@]}" -eq 0 ]; then
+            echo "No changed contract dependency declaration files; skipping scan."
+            exit 0
+          fi
+
           python3 scripts/contract_dependency_scan.py --mode "$SCAN_MODE" "${args[@]}"
