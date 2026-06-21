@@ -7,7 +7,7 @@
 ```text
 services/
 ├── backend/
-│   └── user-api/
+│   └── applicant-api/
 ├── order-api/
 └── order-worker/
 ```
