@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type {
   MobileVerificationController,
@@ -37,6 +37,16 @@ export function MobileVerificationScreen({
 
   const canSend = !isSending && cooldown === 0;
   const otpCode = otpDigits.join("");
+
+  useEffect(() => {
+    if (cooldown <= 0) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setCooldown((current) => Math.max(0, current - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
 
   async function sendOtp() {
     setError(null);
@@ -243,6 +253,7 @@ export function MobileVerificationScreen({
                   type="button"
                   disabled={cooldown > 0}
                   className="rounded font-label-sm text-label-sm text-on-surface-variant disabled:cursor-default enabled:text-primary enabled:hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  onClick={() => void sendOtp()}
                 >
                   {cooldown > 0 ? `Resend in 0:${String(cooldown).padStart(2, "0")}` : "Resend code"}
                 </button>

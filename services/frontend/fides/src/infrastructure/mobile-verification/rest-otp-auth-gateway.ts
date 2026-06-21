@@ -13,6 +13,7 @@ export class RestOtpAuthGateway implements OtpAuthGateway {
   constructor(
     private readonly baseUrl = "/api/v1",
     private readonly fetcher: Fetcher = fetch,
+    private readonly timeoutMs = 10000,
   ) {}
 
   async sendOtp(command: SendOtpCommand): Promise<SendOtpResult> {
@@ -42,25 +43,50 @@ export class RestOtpAuthGateway implements OtpAuthGateway {
     body: Record<string, string>,
     idempotencyKey: string,
   ): Promise<T> {
-    const response = await this.fetcher(`${this.baseUrl}${path}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Idempotency-Key": idempotencyKey,
-      },
-      body: JSON.stringify(body),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    let response: Response;
+    try {
+      response = await this.fetcher(`${this.baseUrl}${path}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw { code: "network_timeout", message: "Request timed out" };
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
 
-    const payload = await response.json();
+    const payload = await readJson(response);
     if (!response.ok) {
-      throw normalizeBffError(payload);
+      throw normalizeBffError(payload, response.status, response.headers);
     }
 
     return payload as T;
   }
 }
 
-function normalizeBffError(payload: unknown): BffOtpError {
+async function readJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeBffError(
+  payload: unknown,
+  status: number,
+  headers: Headers,
+): BffOtpError {
   if (
     payload &&
     typeof payload === "object" &&
@@ -78,5 +104,26 @@ function normalizeBffError(payload: unknown): BffOtpError {
     };
   }
 
+  if (status === 401) {
+    return { code: "unauthorized" };
+  }
+  if (status === 429) {
+    return {
+      code: "otp_cooldown_active",
+      retryAfterSec: parseRetryAfter(headers.get("Retry-After")),
+    };
+  }
+  if (status >= 500) {
+    return { code: "system_error" };
+  }
+
   return { code: "unknown", message: "Request failed" };
+}
+
+function parseRetryAfter(value: string | null): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined;
 }

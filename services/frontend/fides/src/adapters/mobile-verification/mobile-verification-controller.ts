@@ -15,6 +15,7 @@ export type MobileVerificationError = {
   field: "phone" | "otp" | "form";
   message: string;
   retryAfterSec?: number;
+  traceId?: string;
 };
 
 export type MobileVerificationSendResult = {
@@ -37,8 +38,8 @@ export type MobileVerificationController = {
     challengeId: string;
     code: string;
   }): Promise<
-      | { ok: true; value: MobileVerificationVerifiedResult }
-      | { ok: false; error: MobileVerificationError }
+    | { ok: true; value: MobileVerificationVerifiedResult }
+    | { ok: false; error: MobileVerificationError }
   >;
 };
 
@@ -57,11 +58,12 @@ export function createMobileVerificationController(
           phone: phone.localNumber,
           idempotencyKey: keyStore.current("send-otp"),
         });
+        keyStore.rotate("send-otp");
         return { ok: true, value };
       } catch (error) {
         return {
           ok: false,
-          error: mapControllerError(error, "phone"),
+          error: toMobileVerificationError(mapControllerError(error), "phone"),
         };
       }
     },
@@ -75,35 +77,49 @@ export function createMobileVerificationController(
           idempotencyKey: keyStore.current("verify-otp"),
         });
         await sessionStore?.saveVerifiedSession(value);
-        await flowController?.advanceAfterMobileVerified(value);
+        try {
+          await flowController?.advanceAfterMobileVerified(value);
+        } catch (error) {
+          await sessionStore?.clearVerifiedSession();
+          throw error;
+        }
+        keyStore.rotate("verify-otp");
         return { ok: true, value };
       } catch (error) {
+        const mapped = mapControllerError(error);
+        if (mapped.kind === "session_expired") {
+          await sessionStore?.clearVerifiedSession();
+          await flowController?.returnToMobileVerification();
+        }
         return {
           ok: false,
-          error: mapControllerError(error, "otp"),
+          error: toMobileVerificationError(mapped, "otp"),
         };
       }
     },
   };
 }
 
-function mapControllerError(
-  error: unknown,
-  defaultField: "phone" | "otp",
-): MobileVerificationError {
+function mapControllerError(error: unknown): ReturnType<typeof mapOtpAuthError> {
   if (error instanceof Error) {
     if (error.message === "unsupported_country") {
-      return { field: "phone", message: "暂仅支持香港 +852 手机号" };
+      return { kind: "unsupported_country", message: "暂仅支持香港 +852 手机号" };
     }
     if (error.message === "invalid_phone_number") {
-      return { field: "phone", message: "请输入有效的香港手机号" };
+      return { kind: "unsupported_country", message: "请输入有效的香港手机号" };
     }
     if (error.message === "invalid_otp_code") {
-      return { field: "otp", message: "请输入 6 位验证码" };
+      return { kind: "otp_invalid", message: "请输入 6 位验证码" };
     }
   }
 
-  const mapped = mapOtpAuthError(normalizeThrownError(error));
+  return mapOtpAuthError(normalizeThrownError(error));
+}
+
+function toMobileVerificationError(
+  mapped: ReturnType<typeof mapOtpAuthError>,
+  defaultField: "phone" | "otp",
+): MobileVerificationError {
   return {
     field:
       mapped.kind === "otp_invalid" || mapped.kind === "otp_expired"
@@ -115,6 +131,7 @@ function mapControllerError(
             : "form",
     message: mapped.message,
     retryAfterSec: mapped.kind === "cooldown" ? mapped.retryAfterSec : undefined,
+    traceId: mapped.traceId,
   };
 }
 

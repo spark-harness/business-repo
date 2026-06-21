@@ -9,7 +9,7 @@ import type {
 export class MockOtpAuthGateway implements OtpAuthGateway {
   async sendOtp(command: SendOtpCommand): Promise<SendOtpResult> {
     return {
-      challengeId: `mock-challenge-${command.phone}`,
+      challengeId: `mock-challenge-${opaqueId(command.phone)}`,
       expiresInSec: 300,
       resendAfterSec: 59,
     };
@@ -23,13 +23,20 @@ export class MockOtpAuthGateway implements OtpAuthGateway {
       };
     }
 
-    const phone = command.challengeId.replace("mock-challenge-", "");
     return {
       accessToken: "mock-access-token",
       refreshToken: "mock-refresh-token",
-      applicantId: `mock-applicant-${phone}`,
+      applicantId: `mock-applicant-${command.challengeId.replace("mock-challenge-", "")}`,
       expiresInSec: 3600,
       refreshExpiresInSec: 3600,
     };
   }
+}
+
+function opaqueId(value: string): string {
+  let hash = 0;
+  for (const character of value) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return hash.toString(36);
 }

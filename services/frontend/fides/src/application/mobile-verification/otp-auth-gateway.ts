@@ -72,18 +72,21 @@ export interface OtpAuthGateway {
 export function mapOtpAuthError(error: BffOtpError): OtpAuthUiError {
   switch (error.code) {
     case "code_invalid":
+    case "otp_code_invalid":
       return {
         kind: "otp_invalid",
         message: "验证码不正确",
         traceId: error.traceId,
       };
     case "code_expired":
+    case "otp_code_expired":
       return {
         kind: "otp_expired",
         message: "验证码已过期，请重新获取验证码",
         traceId: error.traceId,
       };
     case "too_many_attempts":
+    case "otp_too_many_attempts":
     case "otp_cooldown_active":
       return {
         kind: "cooldown",
@@ -92,6 +95,8 @@ export function mapOtpAuthError(error: BffOtpError): OtpAuthUiError {
         traceId: error.traceId,
       };
     case "unauthorized":
+    case "token_expired":
+    case "BFF-AUTH-0001":
       return {
         kind: "session_expired",
         message: "请重新验证手机号",
@@ -106,7 +111,7 @@ export function mapOtpAuthError(error: BffOtpError): OtpAuthUiError {
     default:
       return {
         kind: "unknown",
-        message: error.message ?? "请求失败，请稍后重试",
+        message: "请求失败，请稍后重试",
         traceId: error.traceId,
       };
   }

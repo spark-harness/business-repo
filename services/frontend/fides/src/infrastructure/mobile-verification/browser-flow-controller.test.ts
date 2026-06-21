@@ -17,6 +17,16 @@ describe("BrowserFlowController", () => {
     expect(storage.dump()).toContain("applicant-1");
     expect(storage.dump()).not.toContain("access-token");
   });
+
+  it("records return to mobile verification after session expiry", async () => {
+    const storage = new MemoryStorage();
+    const controller = new BrowserFlowController(storage);
+
+    await controller.returnToMobileVerification();
+
+    expect(storage.dump()).toContain("mobile-verification");
+    expect(storage.dump()).not.toContain("loan-request");
+  });
 });
 
 class MemoryStorage implements Storage {

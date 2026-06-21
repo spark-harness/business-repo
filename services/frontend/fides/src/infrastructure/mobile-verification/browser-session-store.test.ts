@@ -20,6 +20,19 @@ describe("BrowserSessionStore", () => {
     expect(storage.dump()).not.toContain("refresh-token");
     expect(storage.dump()).toContain("applicant-1");
   });
+
+  it("does not persist phone-shaped mock applicant identifiers", async () => {
+    const storage = new MemoryStorage();
+    const store = new BrowserSessionStore(storage);
+
+    await store.saveVerifiedSession({
+      accessToken: "access-token",
+      applicantId: "mock-applicant-opaque",
+      expiresInSec: 3600,
+    });
+
+    expect(storage.dump()).not.toContain("91234567");
+  });
 });
 
 class MemoryStorage implements Storage {

@@ -7,6 +7,7 @@ import { MobileVerificationScreen } from "./mobile-verification-screen";
 
 describe("MobileVerificationScreen", () => {
   afterEach(() => {
+    vi.useRealTimers();
     cleanup();
   });
 
@@ -46,6 +47,50 @@ describe("MobileVerificationScreen", () => {
       phone: "9123 4567",
     });
   });
+
+  it("counts cooldown down and allows resending a code", async () => {
+    const user = userEvent.setup();
+    const controller = createController();
+    controller.sendOtp = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+          value: {
+            challengeId: "challenge-1",
+            expiresInSec: 300,
+          resendAfterSec: 1,
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+          value: {
+            challengeId: "challenge-2",
+            expiresInSec: 300,
+          resendAfterSec: 1,
+        },
+      });
+    render(<MobileVerificationScreen controller={controller} />);
+
+    await user.type(screen.getByLabelText("Mobile Number"), "9123 4567");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByRole("button", { name: /Resend in 0:01/ })).toHaveProperty(
+      "disabled",
+      true,
+    );
+
+    const resend = await screen.findByRole("button", { name: "Resend code" });
+    expect(resend).toHaveProperty("disabled", false);
+    await user.click(resend);
+
+    await waitFor(() => {
+      expect(controller.sendOtp).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByRole("button", { name: /Resend in 0:01/ })).toHaveProperty(
+      "disabled",
+      true,
+    );
+  }, 10000);
 
   it("keeps the user on the screen when OTP is invalid", async () => {
     const controller = createController();

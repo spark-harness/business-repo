@@ -32,6 +32,7 @@ describe("RestOtpAuthGateway", () => {
         "Idempotency-Key": "send-key",
       },
       body: JSON.stringify({ countryCode: "+852", phone: "91234567" }),
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -92,11 +93,60 @@ describe("RestOtpAuthGateway", () => {
       traceId: "trace-expired",
     });
   });
+
+  it("maps bare unauthorized responses to session expiry", async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse(undefined, 401));
+    const gateway = new RestOtpAuthGateway("/api/v1", fetcher);
+
+    await expect(
+      gateway.verifyOtp({
+        challengeId: "challenge-1",
+        code: "123456",
+        idempotencyKey: "verify-key",
+      }),
+    ).rejects.toMatchObject({ code: "unauthorized" });
+  });
+
+  it("maps bare rate-limit responses with Retry-After", async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse(undefined, 429, { "Retry-After": "33" }));
+    const gateway = new RestOtpAuthGateway("/api/v1", fetcher);
+
+    await expect(
+      gateway.sendOtp({
+        countryCode: "+852",
+        phone: "91234567",
+        idempotencyKey: "send-key",
+      }),
+    ).rejects.toMatchObject({
+      code: "otp_cooldown_active",
+      retryAfterSec: 33,
+    });
+  });
+
+  it("aborts hung OTP requests", async () => {
+    const fetcher = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        }),
+    );
+    const gateway = new RestOtpAuthGateway("/api/v1", fetcher, 1);
+
+    await expect(
+      gateway.sendOtp({
+        countryCode: "+852",
+        phone: "91234567",
+        idempotencyKey: "send-key",
+      }),
+    ).rejects.toMatchObject({ code: "network_timeout" });
+  });
 });
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
+function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
+  return new Response(body === undefined ? "" : JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
   });
 }
