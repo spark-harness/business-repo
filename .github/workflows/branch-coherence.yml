@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   delivery-readiness:
@@ -107,6 +108,18 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.BRANCH_COHERENCE_TOKEN || github.token }}
 
+      - name: Create idl-java-repo app token
+        id: idl-java-token
+        if: steps.requirement.outputs.id != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.IDL_JAVA_READER_APP_ID }}
+          private-key: ${{ secrets.IDL_JAVA_READER_APP_PRIVATE_KEY }}
+          owner: spark-harness
+          repositories: idl-java-repo
+          permission-contents: read
+          permission-packages: read
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -126,7 +139,7 @@ jobs:
           BASE_BRANCH: ${{ github.base_ref }}
           HEAD_BRANCH: ${{ github.head_ref || github.ref_name }}
           GH_TOKEN: ${{ secrets.BRANCH_COHERENCE_TOKEN || github.token }}
-          IDL_JAVA_REPO_TOKEN: ${{ secrets.IDL_JAVA_REPO_TOKEN || secrets.BRANCH_COHERENCE_TOKEN || github.token }}
+          IDL_JAVA_REPO_TOKEN: ${{ steps.idl-java-token.outputs.token || secrets.IDL_JAVA_REPO_TOKEN || secrets.BRANCH_COHERENCE_TOKEN || github.token }}
           IDL_GO_REPO_TOKEN: ${{ secrets.IDL_GO_REPO_TOKEN || secrets.BRANCH_COHERENCE_TOKEN || github.token }}
           JANUS_GITHUB_OWNER: ${{ github.repository_owner }}
         run: |
