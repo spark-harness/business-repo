@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "lint:deps": "depcruise src",
     "dep:graph": "depcruise src --output-type dot | dot -T svg > dependency-graph.svg"
   },
@@ -17,13 +18,17 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dependency-cruiser": "^17.4.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.9"
   }
 }
