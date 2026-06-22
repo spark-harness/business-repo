@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"time"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/spark/fides-bff/internal/biz"
 	"github.com/spark/fides-bff/internal/conf"
+	"github.com/spark/fides-bff/internal/observability"
 )
 
 // Name is the service name registered with Kratos.
@@ -33,16 +35,21 @@ func init() {
 	flag.StringVar(&flagconf, "conf", "configs/config.yaml", "config path, eg: -conf config.yaml")
 }
 
-func newApp(logger log.Logger, hs *http.Server) *kratos.App {
-	return kratos.New(
+func newApp(logger log.Logger, hs *http.Server, registration *registration) *kratos.App {
+	opts := []kratos.Option{
 		kratos.Name(Name),
 		kratos.Version(Version),
 		kratos.Logger(logger),
 		kratos.Server(hs),
-		// Bound graceful shutdown so an in-flight request cannot block stop
-		// indefinitely once downstream calls/middleware land in later tasks.
-		kratos.StopTimeout(10*time.Second),
-	)
+		kratos.StopTimeout(10 * time.Second),
+	}
+	if registration != nil && registration.registrar != nil {
+		opts = append(opts, kratos.Registrar(registration.registrar), kratos.Metadata(registration.metadata))
+	}
+	if registration != nil && registration.endpoint != nil {
+		opts = append(opts, kratos.Endpoint(registration.endpoint))
+	}
+	return kratos.New(opts...)
 }
 
 func main() {
@@ -65,7 +72,13 @@ func main() {
 		panic(err)
 	}
 
-	app, cleanup, err := wireApp(&bc.Server, biz.Version(Version), logger)
+	otelShutdown, err := observability.Setup(context.Background(), bc.Observability.OTel, Name, Version)
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = otelShutdown(context.Background()) }()
+
+	app, cleanup, err := wireApp(&bc.Server, &bc.Applicant, &bc.Registry, biz.Version(Version), logger)
 	if err != nil {
 		panic(err)
 	}

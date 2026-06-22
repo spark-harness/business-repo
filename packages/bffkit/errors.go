@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/transport/http/binding"
@@ -30,19 +31,21 @@ type ErrorEnvelope struct {
 }
 
 type ErrorBody struct {
-	Code    string       `json:"code"`
-	Message string       `json:"message"`
-	Field   string       `json:"field,omitempty"`
-	TraceID string       `json:"traceId,omitempty"`
-	Details []FieldError `json:"details,omitempty"`
+	Code          string       `json:"code"`
+	Message       string       `json:"message"`
+	Field         string       `json:"field,omitempty"`
+	TraceID       string       `json:"traceId,omitempty"`
+	RetryAfterSec int          `json:"retryAfterSec,omitempty"`
+	Details       []FieldError `json:"details,omitempty"`
 }
 
 type HTTPError struct {
-	Status  int
-	Code    string
-	Message string
-	Field   string
-	Details []FieldError
+	Status        int
+	Code          string
+	Message       string
+	Field         string
+	RetryAfterSec int
+	Details       []FieldError
 }
 
 func (e *HTTPError) Error() string {
@@ -94,14 +97,18 @@ func ErrorEncoder(w http.ResponseWriter, r *http.Request, err error) {
 	he := normalizeError(err)
 	traceID, _ := TraceIDFromContext(r.Context())
 	body := ErrorEnvelope{Error: ErrorBody{
-		Code:    he.Code,
-		Message: he.Message,
-		Field:   he.Field,
-		TraceID: traceID,
-		Details: he.Details,
+		Code:          he.Code,
+		Message:       he.Message,
+		Field:         he.Field,
+		TraceID:       traceID,
+		RetryAfterSec: he.RetryAfterSec,
+		Details:       he.Details,
 	}}
 
 	SetErrorCode(w, he.Code)
+	if he.RetryAfterSec > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(he.RetryAfterSec))
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(he.Status)
 	_ = json.NewEncoder(w).Encode(body)

@@ -1,10 +1,13 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
@@ -13,6 +16,7 @@ import (
 
 	"github.com/spark/fides-bff/internal/biz"
 	"github.com/spark/fides-bff/internal/conf"
+	"github.com/spark/fides-bff/internal/data"
 	"github.com/spark/fides-bff/internal/service"
 )
 
@@ -129,6 +133,222 @@ func TestHTTPServer_Idempotency_replaysFirstWriteResponse(t *testing.T) {
 	}
 }
 
+func TestHTTPServer_CORSPreflight_doesNotRequireIdempotencyKey(t *testing.T) {
+	authClient := &fakeApplicantAuthClient{}
+	srv := NewHTTPServer(
+		&conf.Server{CORS: conf.CORS{AllowedOrigins: []string{"http://localhost:3001"}}},
+		service.NewHealthService(biz.NewHealthUsecase("test")),
+		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		bffkit.NewMemoryIdempotencyStore(0),
+		log.DefaultLogger,
+	)
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/auth/otp:send", nil)
+	req.Header.Set("Origin", "http://localhost:3001")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Set("Access-Control-Request-Headers", "content-type,idempotency-key")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	if rec.Header().Get("Access-Control-Allow-Origin") != "http://localhost:3001" {
+		t.Fatalf("allow origin = %q", rec.Header().Get("Access-Control-Allow-Origin"))
+	}
+}
+
 func newTestHTTPServer(health *service.HealthService) *khttp.Server {
-	return NewHTTPServer(&conf.Server{}, health, bffkit.NewMemoryIdempotencyStore(0), log.DefaultLogger)
+	authClient := &fakeApplicantAuthClient{}
+	auth := service.NewAuthService(biz.NewAuthUsecase(authClient))
+	return NewHTTPServer(&conf.Server{}, health, auth, bffkit.NewMemoryIdempotencyStore(0), log.DefaultLogger)
+}
+
+func TestHTTPServer_AuthSendOtp_mapsRequestAndResponse(t *testing.T) {
+	authClient := &fakeApplicantAuthClient{
+		sendResult: biz.SendOtpResult{
+			ChallengeID: "challenge-1",
+			ExpiresIn:   5 * time.Minute,
+			ResendAfter: time.Minute,
+		},
+	}
+	srv := NewHTTPServer(
+		&conf.Server{},
+		service.NewHealthService(biz.NewHealthUsecase("test")),
+		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		bffkit.NewMemoryIdempotencyStore(0),
+		log.DefaultLogger,
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/otp:send", strings.NewReader(`{"countryCode":"+852","phone":"91234567"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(bffkit.HeaderIdempotencyKey, "idem-send")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if authClient.sendCommand.CountryCode != "+852" || authClient.sendCommand.Phone != "91234567" || authClient.sendCommand.IdempotencyKey != "idem-send" {
+		t.Fatalf("send command = %#v", authClient.sendCommand)
+	}
+	var body struct {
+		ChallengeID    string `json:"challengeId"`
+		ExpiresInSec   int32  `json:"expiresInSec"`
+		ResendAfterSec int32  `json:"resendAfterSec"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.ChallengeID != "challenge-1" || body.ExpiresInSec != 300 || body.ResendAfterSec != 60 {
+		t.Fatalf("body = %#v", body)
+	}
+}
+
+func TestHTTPServer_AuthVerifyOtp_mapsExpiredError(t *testing.T) {
+	authClient := &fakeApplicantAuthClient{
+		verifyErr: &biz.AuthError{Code: biz.AuthCodeExpired, Message: "验证码已过期"},
+	}
+	srv := NewHTTPServer(
+		&conf.Server{},
+		service.NewHealthService(biz.NewHealthUsecase("test")),
+		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		bffkit.NewMemoryIdempotencyStore(0),
+		log.DefaultLogger,
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/otp:verify", strings.NewReader(`{"challengeId":"challenge-1","code":"123456"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(bffkit.HeaderIdempotencyKey, "idem-verify")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	}
+	var body bffkit.ErrorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Error.Code != biz.AuthCodeExpired {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, biz.AuthCodeExpired)
+	}
+}
+
+func TestHTTPServer_AuthSendOtp_mapsCooldownRetryAfter(t *testing.T) {
+	authClient := &fakeApplicantAuthClient{
+		sendErr: &biz.AuthError{Code: biz.AuthCodeCooldownActive, Message: "请稍后再试", RetryAfterSec: 42},
+	}
+	srv := NewHTTPServer(
+		&conf.Server{},
+		service.NewHealthService(biz.NewHealthUsecase("test")),
+		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		bffkit.NewMemoryIdempotencyStore(0),
+		log.DefaultLogger,
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/otp:send", strings.NewReader(`{"countryCode":"+852","phone":"91234567"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(bffkit.HeaderIdempotencyKey, "idem-cooldown")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusTooManyRequests, rec.Body.String())
+	}
+	if rec.Header().Get("Retry-After") != "42" {
+		t.Fatalf("Retry-After = %q, want 42", rec.Header().Get("Retry-After"))
+	}
+	var body bffkit.ErrorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Error.Code != biz.AuthCodeCooldownActive || body.Error.RetryAfterSec != 42 {
+		t.Fatalf("error = %#v", body.Error)
+	}
+}
+
+func TestHTTPServer_AuthSendOtp_mapsConsulNoHealthyInstance(t *testing.T) {
+	consul := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer consul.Close()
+
+	authClient := data.NewApplicantAuthClient(&conf.Applicant{Consul: testConsulConfig(consul.URL)})
+	srv := NewHTTPServer(
+		&conf.Server{},
+		service.NewHealthService(biz.NewHealthUsecase("test")),
+		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		bffkit.NewMemoryIdempotencyStore(0),
+		log.DefaultLogger,
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/otp:send", strings.NewReader(`{"countryCode":"+852","phone":"91234567"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(bffkit.HeaderIdempotencyKey, "idem-consul-empty")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
+	}
+	var body bffkit.ErrorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Error.Code != biz.AuthCodeApplicantUnavailable {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, biz.AuthCodeApplicantUnavailable)
+	}
+}
+
+func TestHTTPServer_AuthSendOtp_requiresIdempotencyKey(t *testing.T) {
+	srv := newTestHTTPServer(service.NewHealthService(biz.NewHealthUsecase("test")))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/otp:send", strings.NewReader(`{"countryCode":"+852","phone":"91234567"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	}
+	var body bffkit.ErrorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Error.Field != bffkit.HeaderIdempotencyKey {
+		t.Fatalf("error field = %q, want %q", body.Error.Field, bffkit.HeaderIdempotencyKey)
+	}
+}
+
+type fakeApplicantAuthClient struct {
+	sendCommand biz.SendOtpCommand
+	sendResult  biz.SendOtpResult
+	sendErr     error
+	verifyErr   error
+}
+
+func (f *fakeApplicantAuthClient) SendOtp(_ context.Context, command biz.SendOtpCommand) (biz.SendOtpResult, error) {
+	f.sendCommand = command
+	return f.sendResult, f.sendErr
+}
+
+func (f *fakeApplicantAuthClient) VerifyOtp(_ context.Context, _ biz.VerifyOtpCommand) (biz.VerifyOtpResult, error) {
+	return biz.VerifyOtpResult{}, f.verifyErr
+}
+
+func (f *fakeApplicantAuthClient) RefreshToken(context.Context, biz.RefreshTokenCommand) (biz.RefreshTokenResult, error) {
+	return biz.RefreshTokenResult{AccessToken: "access", ExpiresIn: time.Hour}, nil
+}
+
+func testConsulConfig(raw string) conf.Consul {
+	parts := strings.SplitN(raw, "://", 2)
+	return conf.Consul{Scheme: parts[0], Address: parts[1], ServiceName: "applicant-api"}
 }

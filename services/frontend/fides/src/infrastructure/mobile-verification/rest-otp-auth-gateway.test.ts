@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RestOtpAuthGateway } from "./rest-otp-auth-gateway";
 
 describe("RestOtpAuthGateway", () => {
+  afterEach(() => {
+    vi.doUnmock("@opentelemetry/sdk-trace-web");
+  });
+
   it("posts sendOtp with an Idempotency-Key header", async () => {
     const fetcher = vi.fn().mockResolvedValue(
       jsonResponse({
@@ -30,10 +34,41 @@ describe("RestOtpAuthGateway", () => {
       headers: {
         "Content-Type": "application/json",
         "Idempotency-Key": "send-key",
+        "X-Trace-Id": expect.stringMatching(/^[0-9a-f]{32}$/),
+        traceparent: expect.stringMatching(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/),
       },
       body: JSON.stringify({ countryCode: "+852", phone: "91234567" }),
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it("uses the browser fetch binding when no fetcher is injected", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse({
+        challengeId: "challenge-1",
+        expiresInSec: 300,
+        resendAfterSec: 59,
+      }),
+    );
+    globalThis.fetch = fetcher;
+    const gateway = new RestOtpAuthGateway("/api/v1");
+
+    try {
+      await expect(
+        gateway.sendOtp({
+          countryCode: "+852",
+          phone: "91234567",
+          idempotencyKey: "send-key",
+        }),
+      ).resolves.toMatchObject({
+        challengeId: "challenge-1",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(fetcher).toHaveBeenCalledWith("/api/v1/auth/otp:send", expect.any(Object));
   });
 
   it("maps BFF error envelopes", async () => {
@@ -63,6 +98,38 @@ describe("RestOtpAuthGateway", () => {
       message: "Too many attempts",
       traceId: "trace-1",
       retryAfterSec: 120,
+    });
+  });
+
+  it("posts refreshToken to the BFF refresh route", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse({
+        accessToken: "new-access-token",
+        expiresInSec: 1800,
+      }),
+    );
+    const gateway = new RestOtpAuthGateway("/api/v1", fetcher);
+
+    await expect(
+      gateway.refreshToken({
+        refreshToken: "refresh-token",
+        idempotencyKey: "refresh-key",
+      }),
+    ).resolves.toEqual({
+      accessToken: "new-access-token",
+      expiresInSec: 1800,
+    });
+
+    expect(fetcher).toHaveBeenCalledWith("/api/v1/auth/token:refresh", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": "refresh-key",
+        "X-Trace-Id": expect.stringMatching(/^[0-9a-f]{32}$/),
+        traceparent: expect.stringMatching(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/),
+      },
+      body: JSON.stringify({ refreshToken: "refresh-token" }),
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -141,6 +208,53 @@ describe("RestOtpAuthGateway", () => {
         idempotencyKey: "send-key",
       }),
     ).rejects.toMatchObject({ code: "network_timeout" });
+  });
+
+  it("continues OTP requests when browser tracing cannot initialize", async () => {
+    vi.resetModules();
+    vi.doMock("@opentelemetry/sdk-trace-web", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@opentelemetry/sdk-trace-web")>();
+      class FailingWebTracerProvider extends actual.WebTracerProvider {
+        override register() {
+          throw new Error("otel registration failed");
+        }
+      }
+      return {
+        ...actual,
+        WebTracerProvider: FailingWebTracerProvider,
+      };
+    });
+    const { RestOtpAuthGateway: GatewayWithFailingTracing } = await import("./rest-otp-auth-gateway");
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse({
+        challengeId: "challenge-1",
+        expiresInSec: 300,
+        resendAfterSec: 59,
+      }),
+    );
+    const gateway = new GatewayWithFailingTracing("/api/v1", fetcher);
+
+    await expect(
+      gateway.sendOtp({
+        countryCode: "+852",
+        phone: "91234567",
+        idempotencyKey: "send-key",
+      }),
+    ).resolves.toEqual({
+      challengeId: "challenge-1",
+      expiresInSec: 300,
+      resendAfterSec: 59,
+    });
+
+    expect(fetcher).toHaveBeenCalledWith("/api/v1/auth/otp:send", {
+      method: "POST",
+      headers: expect.objectContaining({
+        "Content-Type": "application/json",
+        "Idempotency-Key": "send-key",
+      }),
+      body: JSON.stringify({ countryCode: "+852", phone: "91234567" }),
+      signal: expect.any(AbortSignal),
+    });
   });
 });
 

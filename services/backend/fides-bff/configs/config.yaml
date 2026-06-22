@@ -2,3 +2,38 @@ server:
   http:
     network: tcp
     addr: 0.0.0.0:8000
+  cors:
+    allowed_origins:
+      - http://localhost:3000
+      - http://localhost:3001
+      - http://127.0.0.1:3000
+      - http://127.0.0.1:3001
+applicant:
+  consul:
+    address: 127.0.0.1:8500
+    scheme: http
+    service_name: applicant-api
+  grpc:
+    timeout: 3s
+    plaintext: true
+registry:
+  consul:
+    enabled: true
+    address: 127.0.0.1:8500
+    scheme: http
+    discovery_addr: 127.0.0.1:8000
+    heartbeat: true
+    health_check: true
+    health_check_interval_sec: 10
+    deregister_after_sec: 60
+    metadata:
+      module: frontend
+observability:
+  otel:
+    enabled: false
+    exporter: otlp
+    endpoint: ""
+    protocol: http/protobuf
+    headers: {}
+    environment: local
+    release: dev

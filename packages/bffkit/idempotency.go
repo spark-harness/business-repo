@@ -158,6 +158,7 @@ func isIdempotencyMethod(method string) bool {
 
 func writeRecord(w http.ResponseWriter, rec IdempotencyRecord) {
 	for key, values := range rec.Header {
+		w.Header().Del(key)
 		for _, value := range values {
 			w.Header().Add(key, value)
 		}
@@ -169,11 +170,16 @@ func writeRecord(w http.ResponseWriter, rec IdempotencyRecord) {
 type captureResponseWriter struct {
 	http.ResponseWriter
 	status int
+	header http.Header
 	body   bytes.Buffer
 }
 
 func newCaptureResponseWriter(w http.ResponseWriter) *captureResponseWriter {
-	return &captureResponseWriter{ResponseWriter: w, status: http.StatusOK}
+	return &captureResponseWriter{ResponseWriter: w, status: http.StatusOK, header: make(http.Header)}
+}
+
+func (w *captureResponseWriter) Header() http.Header {
+	return w.header
 }
 
 func (w *captureResponseWriter) WriteHeader(status int) {
@@ -191,7 +197,7 @@ func (w *captureResponseWriter) SetErrorCode(code string) {
 func (w *captureResponseWriter) Record() IdempotencyRecord {
 	return IdempotencyRecord{
 		Status: w.status,
-		Header: w.Header().Clone(),
+		Header: w.header.Clone(),
 		Body:   append([]byte(nil), w.body.Bytes()...),
 	}
 }

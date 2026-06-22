@@ -44,6 +44,29 @@ func TestIdempotencyFilter_replaysFirstWriteResponseForSameKey(t *testing.T) {
 	}
 }
 
+func TestIdempotencyFilter_doesNotReplayOuterFilterHeaders(t *testing.T) {
+	store := NewMemoryIdempotencyStore(time.Hour)
+	handler := CORSFilter(CORSConfig{AllowedOrigins: []string{"http://localhost:3001"}})(
+		IdempotencyFilter(store)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, `{"ok":true}`)
+		})),
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/applications", nil)
+	req.Header.Set("Origin", "http://localhost:3001")
+	req.Header.Set(HeaderIdempotencyKey, "idem-cors")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	values := rec.Header().Values("Access-Control-Allow-Origin")
+	if len(values) != 1 || values[0] != "http://localhost:3001" {
+		t.Fatalf("Access-Control-Allow-Origin values = %#v", values)
+	}
+}
+
 func TestIdempotencyFilter_doesNotCacheReadRequests(t *testing.T) {
 	store := NewMemoryIdempotencyStore(time.Hour)
 	calls := 0
