@@ -6,6 +6,7 @@ import com.spark.applicant.bootstrap.ApplicantAuthProperties;
 import com.spark.common.spring.cleanarchitecture.annotation.InfrastructureAdapter;
 import java.time.Instant;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 @InfrastructureAdapter
@@ -14,6 +15,7 @@ public class RedisSessionTokenStore implements SessionTokenStore {
     private final ExpiringKeyValueStore store;
     private final String keyPrefix;
 
+    @Autowired
     public RedisSessionTokenStore(ExpiringKeyValueStore store, ApplicantAuthProperties properties) {
         this(store, properties.getKeyPrefix());
     }

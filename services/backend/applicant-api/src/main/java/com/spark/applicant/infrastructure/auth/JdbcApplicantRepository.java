@@ -1,7 +1,6 @@
 package com.spark.applicant.infrastructure.auth;
 
 import com.spark.applicant.application.auth.port.ApplicantRepository;
-import com.spark.applicant.bootstrap.ApplicantAuthProperties;
 import com.spark.applicant.domain.applicant.Applicant;
 import com.spark.applicant.domain.applicant.PhoneNumber;
 import com.spark.common.spring.cleanarchitecture.annotation.InfrastructureAdapter;
@@ -13,6 +12,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -22,20 +22,14 @@ public class JdbcApplicantRepository implements ApplicantRepository {
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
 
-    public JdbcApplicantRepository(JdbcTemplate jdbcTemplate, ApplicantAuthProperties properties, Clock clock) {
-        this(jdbcTemplate, clock, properties.isInitializeSchema());
-    }
-
-    JdbcApplicantRepository(JdbcTemplate jdbcTemplate, boolean initializeSchema) {
-        this(jdbcTemplate, Clock.systemUTC(), initializeSchema);
-    }
-
-    private JdbcApplicantRepository(JdbcTemplate jdbcTemplate, Clock clock, boolean initializeSchema) {
+    @Autowired
+    public JdbcApplicantRepository(JdbcTemplate jdbcTemplate, Clock clock) {
         this.jdbcTemplate = jdbcTemplate;
         this.clock = clock;
-        if (initializeSchema) {
-            initializeSchema();
-        }
+    }
+
+    JdbcApplicantRepository(JdbcTemplate jdbcTemplate) {
+        this(jdbcTemplate, Clock.systemUTC());
     }
 
     @Override
@@ -80,17 +74,4 @@ public class JdbcApplicantRepository implements ApplicantRepository {
                 resultSet.getTimestamp("updated_at").toInstant());
     }
 
-    private void initializeSchema() {
-        jdbcTemplate.execute(
-                """
-                create table if not exists applicants (
-                    applicant_id varchar(80) primary key,
-                    country_code varchar(16) not null,
-                    phone varchar(64) not null,
-                    phone_key varchar(96) not null unique,
-                    created_at timestamp not null,
-                    updated_at timestamp not null
-                )
-                """);
-    }
 }

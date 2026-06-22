@@ -16,7 +16,12 @@ import org.springframework.http.ResponseEntity;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "spark.grpc.server.enabled=false")
+        properties = {
+            "spark.grpc.server.enabled=false",
+            "spark.applicant.auth.runtime-store=in-memory",
+            "spark.applicant.auth.token-mode=simple",
+            "spark.applicant.auth.consul.enabled=false"
+        })
 class ApplicantApiApplicationSmokeTest {
     @LocalServerPort
     int port;

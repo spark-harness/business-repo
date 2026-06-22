@@ -1,0 +1,38 @@
+name: applicant-api
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: forest
+      POSTGRES_PASSWORD: forest_dev_password
+      POSTGRES_DB: app
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forest -d app"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--requirepass", "forest_dev_password"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "forest_dev_password", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  consul:
+    image: hashicorp/consul:1.18
+    command: ["agent", "-dev", "-client=0.0.0.0"]
+    ports:
+      - "8500:8500"
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

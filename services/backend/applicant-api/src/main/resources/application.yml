@@ -1,11 +1,56 @@
 management:
   health:
     redis:
-      enabled: false
+      enabled: true
+
+otel:
+  service:
+    name: applicant-api
+  propagators: tracecontext,baggage
+  traces:
+    exporter: ${OTEL_TRACES_EXPORTER:none}
+    sampler: ${OTEL_TRACES_SAMPLER:parentbased_traceidratio}
+    sampler.arg: ${OTEL_TRACES_SAMPLER_ARG:0.0}
+  metrics:
+    exporter: none
+  logs:
+    exporter: none
+  exporter:
+    otlp:
+      traces:
+        protocol: http/protobuf
+        endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:}
+        headers: ${OTEL_EXPORTER_OTLP_TRACES_HEADERS:}
 
 spark:
   applicant:
     auth:
-      runtime-store: in-memory
+      runtime-store: redis-jdbc
       otp-provider: test
-      token-mode: simple
+      token-mode: hmac
+      jdbc-url: ${APPLICANT_DB_URL:jdbc:postgresql://localhost:5432/app}
+      jdbc-username: ${APPLICANT_DB_USERNAME:forest}
+      jdbc-password: ${APPLICANT_DB_PASSWORD:forest_dev_password}
+      token-secret: ${APPLICANT_TOKEN_SECRET:local-dev-token-secret}
+      migrations-enabled: ${APPLICANT_MIGRATIONS_ENABLED:true}
+      key-prefix: ${APPLICANT_REDIS_KEY_PREFIX:applicant-api}
+      consul:
+        enabled: ${APPLICANT_CONSUL_ENABLED:true}
+        url: ${APPLICANT_CONSUL_URL:http://localhost:8500}
+        service-name: applicant-api
+        service-address: ${APPLICANT_SERVICE_ADDRESS:127.0.0.1}
+        http-port: ${SERVER_PORT:8080}
+        grpc-port: ${APPLICANT_GRPC_PORT:9090}
+        health-check-url: ${APPLICANT_CONSUL_HEALTH_CHECK_URL:}
+        health-check-path: /ready
+  grpc:
+    server:
+      port: ${APPLICANT_GRPC_PORT:9090}
+
+spring:
+  data:
+    redis:
+      host: ${APPLICANT_REDIS_HOST:localhost}
+      port: ${APPLICANT_REDIS_PORT:6379}
+      password: ${APPLICANT_REDIS_PASSWORD:forest_dev_password}
+      timeout: 2s

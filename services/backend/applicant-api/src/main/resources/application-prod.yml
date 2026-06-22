@@ -3,6 +3,25 @@ management:
     redis:
       enabled: true
 
+otel:
+  service:
+    name: applicant-api
+  propagators: tracecontext,baggage
+  traces:
+    exporter: otlp
+    sampler: ${OTEL_TRACES_SAMPLER:parentbased_traceidratio}
+    sampler.arg: ${OTEL_TRACES_SAMPLER_ARG:0.1}
+  metrics:
+    exporter: none
+  logs:
+    exporter: none
+  exporter:
+    otlp:
+      traces:
+        protocol: http/protobuf
+        endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:}
+        headers: ${OTEL_EXPORTER_OTLP_TRACES_HEADERS:}
+
 spark:
   applicant:
     auth:
@@ -13,8 +32,20 @@ spark:
       jdbc-username: ${APPLICANT_DB_USERNAME:}
       jdbc-password: ${APPLICANT_DB_PASSWORD:}
       token-secret: ${APPLICANT_TOKEN_SECRET:}
+      migrations-enabled: ${APPLICANT_MIGRATIONS_ENABLED:true}
+      consul:
+        enabled: true
+        url: ${APPLICANT_CONSUL_URL:}
+        service-name: applicant-api
+        service-address: ${APPLICANT_SERVICE_ADDRESS:}
+        http-port: ${SERVER_PORT:8080}
+        grpc-port: ${APPLICANT_GRPC_PORT:9090}
+        health-check-url: ${APPLICANT_CONSUL_HEALTH_CHECK_URL:}
 
 spring:
   data:
     redis:
+      host: ${APPLICANT_REDIS_HOST:}
+      port: ${APPLICANT_REDIS_PORT:6379}
+      password: ${APPLICANT_REDIS_PASSWORD:}
       timeout: 2s
