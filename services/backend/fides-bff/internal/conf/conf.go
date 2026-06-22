@@ -7,16 +7,70 @@ package conf
 
 // Bootstrap is the root config loaded from configs/config.yaml.
 type Bootstrap struct {
-	Server Server `json:"server"`
+	Server        Server        `json:"server"`
+	Applicant     Applicant     `json:"applicant"`
+	Registry      Registry      `json:"registry"`
+	Observability Observability `json:"observability"`
 }
 
 // Server holds transport configuration.
 type Server struct {
 	HTTP HTTP `json:"http"`
+	CORS CORS `json:"cors"`
 }
 
 // HTTP holds the REST listener configuration.
 type HTTP struct {
 	Network string `json:"network"`
 	Addr    string `json:"addr"`
+}
+
+type CORS struct {
+	AllowedOrigins []string `json:"allowed_origins"`
+}
+
+type Applicant struct {
+	Consul Consul `json:"consul"`
+	GRPC   GRPC   `json:"grpc"`
+}
+
+type Consul struct {
+	Address     string `json:"address"`
+	Scheme      string `json:"scheme"`
+	ServiceName string `json:"service_name"`
+}
+
+type GRPC struct {
+	Timeout   string `json:"timeout"`
+	Plaintext bool   `json:"plaintext"`
+}
+
+type Registry struct {
+	Consul ServiceRegistryConsul `json:"consul"`
+}
+
+type ServiceRegistryConsul struct {
+	Enabled                bool              `json:"enabled"`
+	Address                string            `json:"address"`
+	Scheme                 string            `json:"scheme"`
+	DiscoveryAddr          string            `json:"discovery_addr"`
+	Heartbeat              bool              `json:"heartbeat"`
+	HealthCheck            bool              `json:"health_check"`
+	HealthCheckIntervalSec int               `json:"health_check_interval_sec"`
+	DeregisterAfterSec     int               `json:"deregister_after_sec"`
+	Metadata               map[string]string `json:"metadata"`
+}
+
+type Observability struct {
+	OTel OTel `json:"otel"`
+}
+
+type OTel struct {
+	Enabled     bool              `json:"enabled"`
+	Exporter    string            `json:"exporter"`
+	Endpoint    string            `json:"endpoint"`
+	Protocol    string            `json:"protocol"`
+	Headers     map[string]string `json:"headers"`
+	Environment string            `json:"environment"`
+	Release     string            `json:"release"`
 }

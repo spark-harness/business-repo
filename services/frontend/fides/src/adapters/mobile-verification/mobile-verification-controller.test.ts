@@ -142,6 +142,10 @@ function createGateway(): OtpAuthGateway {
       applicantId: "applicant-1",
       expiresInSec: 3600,
     }),
+    refreshToken: vi.fn().mockResolvedValue({
+      accessToken: "refreshed-access-token",
+      expiresInSec: 3600,
+    }),
   };
 }
 

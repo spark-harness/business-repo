@@ -1,18 +1,24 @@
 import type {
   BffOtpError,
   OtpAuthGateway,
+  RefreshTokenCommand,
+  RefreshTokenResult,
   SendOtpCommand,
   SendOtpResult,
   VerifyOtpCommand,
   VerifyOtpResult,
 } from "@/application/mobile-verification/otp-auth-gateway";
+import { context, trace } from "@opentelemetry/api";
+import type { Context } from "@opentelemetry/api";
+import { W3CTraceContextPropagator } from "@opentelemetry/core";
+import { activeContext } from "@/infrastructure/observability/browser-tracing";
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export class RestOtpAuthGateway implements OtpAuthGateway {
   constructor(
     private readonly baseUrl = "/api/v1",
-    private readonly fetcher: Fetcher = fetch,
+    private readonly fetcher: Fetcher = defaultFetch,
     private readonly timeoutMs = 10000,
   ) {}
 
@@ -38,21 +44,67 @@ export class RestOtpAuthGateway implements OtpAuthGateway {
     );
   }
 
+  async refreshToken(command: RefreshTokenCommand): Promise<RefreshTokenResult> {
+    return this.post<RefreshTokenResult>(
+      "/auth/token:refresh",
+      {
+        refreshToken: command.refreshToken,
+      },
+      command.idempotencyKey,
+    );
+  }
+
   private async post<T>(
     path: string,
     body: Record<string, string>,
     idempotencyKey: string,
   ): Promise<T> {
+    const response = await this.postWithOptionalTracing(path, body, idempotencyKey);
+
+    const payload = await readJson(response);
+    if (!response.ok) {
+      throw normalizeBffError(payload, response.status, response.headers);
+    }
+
+    return payload as T;
+  }
+
+  private async postWithOptionalTracing<T>(
+    path: string,
+    body: Record<string, string>,
+    idempotencyKey: string,
+  ): Promise<Response> {
+    try {
+      const baseContext = activeContext();
+      const tracer = trace.getTracer("fides.mobile-verification");
+      const span = tracer.startSpan(`POST ${path}`);
+      const requestContext = trace.setSpan(baseContext, span);
+      return await context.with(requestContext, async () => {
+        try {
+          return await this.fetchWithTimeout(path, body, traceHeaders(idempotencyKey, requestContext));
+        } finally {
+          span.end();
+        }
+      });
+    } catch (error) {
+      if (isNetworkError(error)) {
+        throw error;
+      }
+      return this.fetchWithTimeout(path, body, baseHeaders(idempotencyKey));
+    }
+  }
+
+  private async fetchWithTimeout(
+    path: string,
+    body: Record<string, string>,
+    headers: Record<string, string>,
+  ): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    let response: Response;
     try {
-      response = await this.fetcher(`${this.baseUrl}${path}`, {
+      return await this.fetcher(`${this.baseUrl}${path}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Idempotency-Key": idempotencyKey,
-        },
+        headers,
         body: JSON.stringify(body),
         signal: controller.signal,
       });
@@ -64,14 +116,46 @@ export class RestOtpAuthGateway implements OtpAuthGateway {
     } finally {
       clearTimeout(timeout);
     }
-
-    const payload = await readJson(response);
-    if (!response.ok) {
-      throw normalizeBffError(payload, response.status, response.headers);
-    }
-
-    return payload as T;
   }
+}
+
+function defaultFetch(input: RequestInfo | URL, init?: RequestInit) {
+  return fetch(input, init);
+}
+
+function traceHeaders(idempotencyKey: string, requestContext: Context): Record<string, string> {
+  const headers = baseHeaders(idempotencyKey);
+  try {
+    new W3CTraceContextPropagator().inject(requestContext, headers, {
+      set(carrier, key, value) {
+        carrier[key] = value;
+      },
+    });
+  } catch {
+    return headers;
+  }
+  const traceId = trace.getSpanContext(requestContext)?.traceId;
+  if (traceId) {
+    headers["X-Trace-Id"] = traceId;
+  }
+  return headers;
+}
+
+function baseHeaders(idempotencyKey: string): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    "Idempotency-Key": idempotencyKey,
+  };
+}
+
+function isNetworkError(error: unknown): boolean {
+  return (
+    error instanceof DOMException ||
+    (error !== null &&
+      typeof error === "object" &&
+      "code" in error &&
+      typeof (error as { code?: unknown }).code === "string")
+  );
 }
 
 async function readJson(response: Response): Promise<unknown> {

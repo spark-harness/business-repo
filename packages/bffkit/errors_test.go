@@ -73,6 +73,32 @@ func TestErrorEncoder_writesEnvelopeWithTraceIDAndValidationDetails(t *testing.T
 	}
 }
 
+func TestErrorEncoder_writesRetryAfterInEnvelopeAndHeader(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/otp:send", nil)
+	rec := httptest.NewRecorder()
+
+	ErrorEncoder(rec, req, &HTTPError{
+		Status:        http.StatusTooManyRequests,
+		Code:          "otp_cooldown_active",
+		Message:       "cooldown active",
+		RetryAfterSec: 42,
+	})
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusTooManyRequests)
+	}
+	if rec.Header().Get("Retry-After") != "42" {
+		t.Fatalf("Retry-After = %q, want 42", rec.Header().Get("Retry-After"))
+	}
+	var body ErrorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode envelope: %v", err)
+	}
+	if body.Error.RetryAfterSec != 42 {
+		t.Fatalf("retryAfterSec = %d, want 42", body.Error.RetryAfterSec)
+	}
+}
+
 func TestErrorEncoder_mapsKratosStatusToStableCode(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -29,6 +29,18 @@ jobs:
           go-version-file: services/backend/fides-bff/go.mod
           cache-dependency-path: services/backend/fides-bff/go.sum
 
+      - name: Configure private Go modules
+        env:
+          IDL_GO_REPO_TOKEN: ${{ secrets.IDL_GO_REPO_TOKEN || secrets.BRANCH_COHERENCE_TOKEN || github.token }}
+        run: |
+          if [ -z "$IDL_GO_REPO_TOKEN" ]; then
+            echo "::error::Missing token with read access to spark-harness/idl-go-repo."
+            exit 1
+          fi
+          git config --global url."https://x-access-token:${IDL_GO_REPO_TOKEN}@github.com/".insteadOf "https://github.com/"
+          echo "GOPRIVATE=github.com/spark-harness/*" >> "$GITHUB_ENV"
+          echo "GONOSUMDB=github.com/spark-harness/*" >> "$GITHUB_ENV"
+
       - name: Verify gofmt
         run: |
           unformatted=$(gofmt -l .)
@@ -56,6 +68,18 @@ jobs:
         with:
           go-version-file: services/backend/fides-bff/go.mod
           cache-dependency-path: services/backend/fides-bff/go.sum
+
+      - name: Configure private Go modules
+        env:
+          IDL_GO_REPO_TOKEN: ${{ secrets.IDL_GO_REPO_TOKEN || secrets.BRANCH_COHERENCE_TOKEN || github.token }}
+        run: |
+          if [ -z "$IDL_GO_REPO_TOKEN" ]; then
+            echo "::error::Missing token with read access to spark-harness/idl-go-repo."
+            exit 1
+          fi
+          git config --global url."https://x-access-token:${IDL_GO_REPO_TOKEN}@github.com/".insteadOf "https://github.com/"
+          echo "GOPRIVATE=github.com/spark-harness/*" >> "$GITHUB_ENV"
+          echo "GONOSUMDB=github.com/spark-harness/*" >> "$GITHUB_ENV"
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7

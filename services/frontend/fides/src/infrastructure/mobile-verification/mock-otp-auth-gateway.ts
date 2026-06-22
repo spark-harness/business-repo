@@ -1,5 +1,7 @@
 import type {
   OtpAuthGateway,
+  RefreshTokenCommand,
+  RefreshTokenResult,
   SendOtpCommand,
   SendOtpResult,
   VerifyOtpCommand,
@@ -29,6 +31,13 @@ export class MockOtpAuthGateway implements OtpAuthGateway {
       applicantId: `mock-applicant-${command.challengeId.replace("mock-challenge-", "")}`,
       expiresInSec: 3600,
       refreshExpiresInSec: 3600,
+    };
+  }
+
+  async refreshToken(_command: RefreshTokenCommand): Promise<RefreshTokenResult> {
+    return {
+      accessToken: "mock-refreshed-access-token",
+      expiresInSec: 3600,
     };
   }
 }

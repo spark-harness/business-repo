@@ -70,4 +70,18 @@ describe("MockOtpAuthGateway", () => {
       }),
     ).rejects.toMatchObject({ code: "code_invalid" });
   });
+
+  it("refreshes mock access tokens", async () => {
+    const gateway = new MockOtpAuthGateway();
+
+    await expect(
+      gateway.refreshToken({
+        refreshToken: "mock-refresh-token",
+        idempotencyKey: "refresh-key",
+      }),
+    ).resolves.toEqual({
+      accessToken: "mock-refreshed-access-token",
+      expiresInSec: 3600,
+    });
+  });
 });

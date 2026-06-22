@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -73,18 +74,37 @@ func TestTraceFilter_logsErrorCodeForFailure(t *testing.T) {
 }
 
 func TestOutgoingGRPCContext_propagatesTraceMetadata(t *testing.T) {
-	ctx := ContextWithTraceID(context.Background(), "trace-abc")
+	traceID := "4bf92f3577b34da6a3ce929d0e0e4736"
+	spanID := "00f067aa0ba902b7"
+	parsedTraceID, err := oteltrace.TraceIDFromHex(traceID)
+	if err != nil {
+		t.Fatalf("trace id: %v", err)
+	}
+	parsedSpanID, err := oteltrace.SpanIDFromHex(spanID)
+	if err != nil {
+		t.Fatalf("span id: %v", err)
+	}
+	ctx := oteltrace.ContextWithSpanContext(context.Background(), oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
+		TraceID:    parsedTraceID,
+		SpanID:     parsedSpanID,
+		TraceFlags: oteltrace.FlagsSampled,
+		Remote:     false,
+	}))
+	ctx = ContextWithTraceID(ctx, traceID)
 	ctx = ContextWithCorrelationID(ctx, "corr-def")
 
 	md, ok := metadata.FromOutgoingContext(OutgoingGRPCContext(ctx))
 	if !ok {
 		t.Fatal("missing outgoing metadata")
 	}
-	if got := md.Get("x-trace-id"); len(got) != 1 || got[0] != "trace-abc" {
-		t.Fatalf("x-trace-id = %#v, want trace-abc", got)
+	if got := md.Get("x-trace-id"); len(got) != 1 || got[0] != traceID {
+		t.Fatalf("x-trace-id = %#v, want %s", got, traceID)
 	}
 	if got := md.Get("x-correlation-id"); len(got) != 1 || got[0] != "corr-def" {
 		t.Fatalf("x-correlation-id = %#v, want corr-def", got)
+	}
+	if got := md.Get("traceparent"); len(got) != 1 || got[0] != "00-"+traceID+"-"+spanID+"-01" {
+		t.Fatalf("traceparent = %#v, want W3C trace context", got)
 	}
 }
 

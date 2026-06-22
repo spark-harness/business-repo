@@ -15,6 +15,7 @@ import (
 
 	"github.com/spark/fides-bff/internal/biz"
 	"github.com/spark/fides-bff/internal/conf"
+	"github.com/spark/fides-bff/internal/data"
 	"github.com/spark/fides-bff/internal/server"
 	"github.com/spark/fides-bff/internal/service"
 )
@@ -25,11 +26,16 @@ import (
 // (biz/service/server) stay free of the wire DI framework, per the team
 // backend clean-architecture rule that domain/application must not depend on
 // DI frameworks.
-func wireApp(*conf.Server, biz.Version, log.Logger) (*kratos.App, func(), error) {
+func wireApp(*conf.Server, *conf.Applicant, *conf.Registry, biz.Version, log.Logger) (*kratos.App, func(), error) {
 	panic(wire.Build(
 		biz.NewHealthUsecase,
+		biz.NewAuthUsecase,
+		data.NewApplicantAuthClient,
+		wire.Bind(new(biz.ApplicantAuthClient), new(*data.ApplicantAuthClient)),
 		service.NewHealthService,
+		service.NewAuthService,
 		newIdempotencyStore,
+		newConsulRegistration,
 		server.NewHTTPServer,
 		newApp,
 	))

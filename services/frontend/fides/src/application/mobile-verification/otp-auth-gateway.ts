@@ -24,6 +24,16 @@ export type VerifyOtpResult = {
   refreshExpiresInSec?: number;
 };
 
+export type RefreshTokenCommand = {
+  refreshToken: string;
+  idempotencyKey: string;
+};
+
+export type RefreshTokenResult = {
+  accessToken: string;
+  expiresInSec: number;
+};
+
 export type BffOtpError = {
   code: string;
   message?: string;
@@ -67,6 +77,7 @@ export type OtpAuthUiError =
 export interface OtpAuthGateway {
   sendOtp(command: SendOtpCommand): Promise<SendOtpResult>;
   verifyOtp(command: VerifyOtpCommand): Promise<VerifyOtpResult>;
+  refreshToken(command: RefreshTokenCommand): Promise<RefreshTokenResult>;
 }
 
 export function mapOtpAuthError(error: BffOtpError): OtpAuthUiError {

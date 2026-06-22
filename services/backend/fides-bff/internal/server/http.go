@@ -10,11 +10,12 @@ import (
 )
 
 // NewHTTPServer builds the REST transport and registers the /api/v1 routes.
-func NewHTTPServer(c *conf.Server, health *service.HealthService, store bffkit.IdempotencyStore, logger log.Logger) *http.Server {
+func NewHTTPServer(c *conf.Server, health *service.HealthService, auth *service.AuthService, store bffkit.IdempotencyStore, logger log.Logger) *http.Server {
 	opts := []http.ServerOption{
 		http.ErrorEncoder(bffkit.ErrorEncoder),
 		http.Filter(
 			bffkit.TraceFilter(log.NewHelper(logger)),
+			bffkit.CORSFilter(bffkit.CORSConfig{AllowedOrigins: c.CORS.AllowedOrigins, MaxAgeSec: 600}),
 			bffkit.IdempotencyFilter(store),
 		),
 	}
@@ -28,5 +29,8 @@ func NewHTTPServer(c *conf.Server, health *service.HealthService, store bffkit.I
 
 	v1 := srv.Route("/api/v1")
 	v1.GET("/health", health.Health)
+	v1.POST("/auth/otp:send", auth.SendOtp)
+	v1.POST("/auth/otp:verify", auth.VerifyOtp)
+	v1.POST("/auth/token:refresh", auth.RefreshToken)
 	return srv
 }

@@ -7,15 +7,15 @@
 package main
 
 import (
-	"time"
-
 	"github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/spark/bffkit"
 	"github.com/spark/fides-bff/internal/biz"
 	"github.com/spark/fides-bff/internal/conf"
+	"github.com/spark/fides-bff/internal/data"
 	"github.com/spark/fides-bff/internal/server"
 	"github.com/spark/fides-bff/internal/service"
+	"time"
 )
 
 // Injectors from wire.go:
@@ -26,15 +26,24 @@ import (
 // (biz/service/server) stay free of the wire DI framework, per the team
 // backend clean-architecture rule that domain/application must not depend on
 // DI frameworks.
-func wireApp(confServer *conf.Server, version biz.Version, logger log.Logger) (*kratos.App, func(), error) {
+func wireApp(confServer *conf.Server, applicant *conf.Applicant, registry *conf.Registry, version biz.Version, logger log.Logger) (*kratos.App, func(), error) {
 	healthUsecase := biz.NewHealthUsecase(version)
 	healthService := service.NewHealthService(healthUsecase)
+	applicantAuthClient := data.NewApplicantAuthClient(applicant)
+	authUsecase := biz.NewAuthUsecase(applicantAuthClient)
+	authService := service.NewAuthService(authUsecase)
 	idempotencyStore := newIdempotencyStore()
-	httpServer := server.NewHTTPServer(confServer, healthService, idempotencyStore, logger)
-	app := newApp(logger, httpServer)
+	httpServer := server.NewHTTPServer(confServer, healthService, authService, idempotencyStore, logger)
+	mainRegistration, err := newConsulRegistration(registry)
+	if err != nil {
+		return nil, nil, err
+	}
+	app := newApp(logger, httpServer, mainRegistration)
 	return app, func() {
 	}, nil
 }
+
+// wire.go:
 
 func newIdempotencyStore() bffkit.IdempotencyStore {
 	return bffkit.NewMemoryIdempotencyStore(24 * time.Hour)

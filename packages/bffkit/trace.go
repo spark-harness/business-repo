@@ -22,6 +22,9 @@ import (
 const (
 	HeaderTraceID       = "X-Trace-Id"
 	HeaderCorrelationID = "X-Correlation-Id"
+	HeaderTraceParent   = "traceparent"
+	HeaderTraceState    = "tracestate"
+	HeaderBaggage       = "baggage"
 )
 
 type contextKey string
@@ -51,8 +54,6 @@ func TraceFilter(logger AccessLogger) khttp.FilterFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
-			traceID := firstNonEmpty(r.Header.Get(HeaderTraceID), traceIDFromTraceparent(r.Header.Get("traceparent")), newTraceID())
-			correlationID := firstNonEmpty(r.Header.Get(HeaderCorrelationID), traceID)
 			route := routePattern(r.URL.Path)
 			operation := r.Method + " " + route
 			ctx := propagation.TraceContext{}.Extract(r.Context(), propagation.HeaderCarrier(r.Header))
@@ -61,12 +62,16 @@ func TraceFilter(logger AccessLogger) khttp.FilterFunc {
 				oteltrace.WithAttributes(
 					attribute.String("http.request.method", r.Method),
 					attribute.String("http.route", route),
-					attribute.String("trace_id", traceID),
-					attribute.String("request_id", correlationID),
 				),
 			)
 			defer span.End()
 
+			traceID := firstNonEmpty(r.Header.Get(HeaderTraceID), spanTraceID(span), newTraceID())
+			correlationID := firstNonEmpty(r.Header.Get(HeaderCorrelationID), traceID)
+			span.SetAttributes(
+				attribute.String("trace_id", traceID),
+				attribute.String("request_id", correlationID),
+			)
 			ctx = ContextWithTraceID(ctx, traceID)
 			ctx = ContextWithCorrelationID(ctx, correlationID)
 
@@ -164,6 +169,8 @@ func CorrelationIDFromContext(ctx context.Context) (string, bool) {
 func OutgoingGRPCContext(ctx context.Context) context.Context {
 	traceID, _ := TraceIDFromContext(ctx)
 	correlationID, _ := CorrelationIDFromContext(ctx)
+	carrier := propagation.MapCarrier{}
+	propagation.TraceContext{}.Inject(ctx, carrier)
 	kvs := make([]string, 0, 4)
 	if traceID != "" {
 		kvs = append(kvs, strings.ToLower(HeaderTraceID), traceID)
@@ -171,18 +178,24 @@ func OutgoingGRPCContext(ctx context.Context) context.Context {
 	if correlationID != "" {
 		kvs = append(kvs, strings.ToLower(HeaderCorrelationID), correlationID)
 	}
+	if traceparent := carrier.Get("traceparent"); traceparent != "" {
+		kvs = append(kvs, "traceparent", traceparent)
+	}
+	if tracestate := carrier.Get("tracestate"); tracestate != "" {
+		kvs = append(kvs, "tracestate", tracestate)
+	}
 	if len(kvs) == 0 {
 		return ctx
 	}
 	return metadata.AppendToOutgoingContext(ctx, kvs...)
 }
 
-func traceIDFromTraceparent(traceparent string) string {
-	parts := strings.Split(traceparent, "-")
-	if len(parts) >= 2 && len(parts[1]) == 32 {
-		return parts[1]
+func spanTraceID(span oteltrace.Span) string {
+	spanContext := span.SpanContext()
+	if !spanContext.IsValid() {
+		return ""
 	}
-	return ""
+	return spanContext.TraceID().String()
 }
 
 func firstNonEmpty(values ...string) string {

@@ -1,6 +1,7 @@
 import { createMobileVerificationController } from "@/adapters/mobile-verification/mobile-verification-controller";
 import type {
   OtpAuthGateway,
+  RefreshTokenResult,
   SendOtpResult,
   VerifyOtpResult,
 } from "@/application/mobile-verification/otp-auth-gateway";
@@ -35,6 +36,10 @@ class DisabledOtpAuthGateway implements OtpAuthGateway {
   }
 
   async verifyOtp(): Promise<VerifyOtpResult> {
+    throw { code: "otp_disabled", message: "OTP is disabled" };
+  }
+
+  async refreshToken(): Promise<RefreshTokenResult> {
     throw { code: "otp_disabled", message: "OTP is disabled" };
   }
 }
