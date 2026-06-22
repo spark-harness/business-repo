@@ -11,7 +11,14 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest(classes = ApplicantApiApplication.class, properties = "spark.grpc.server.enabled=false")
+@SpringBootTest(
+        classes = ApplicantApiApplication.class,
+        properties = {
+            "spark.grpc.server.enabled=false",
+            "spark.applicant.auth.runtime-store=in-memory",
+            "spark.applicant.auth.token-mode=simple",
+            "spark.applicant.auth.consul.enabled=false"
+        })
 @AutoConfigureMockMvc
 class HealthHttpAdapterTest {
     @Autowired

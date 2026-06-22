@@ -7,6 +7,7 @@ import com.spark.applicant.domain.applicant.PhoneNumber;
 import com.spark.common.spring.cleanarchitecture.annotation.InfrastructureAdapter;
 import java.time.Instant;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 @InfrastructureAdapter
@@ -15,6 +16,7 @@ public class RedisOtpChallengeRepository implements OtpChallengeRepository {
     private final ExpiringKeyValueStore store;
     private final String keyPrefix;
 
+    @Autowired
     public RedisOtpChallengeRepository(ExpiringKeyValueStore store, ApplicantAuthProperties properties) {
         this(store, properties.getKeyPrefix());
     }
