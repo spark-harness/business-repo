@@ -45,5 +45,5 @@ NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_HEADERS='<otlp-traces-headers>'
 ## 架构约束
 
 规则见 `.dependency-cruiser.cjs` 与各层 `src/<层>/README.md`，语义对齐
-`clean-architecture-guide.md` §1-§4。CI 在 `.github/workflows/fides-ci.yml`
-运行 `pnpm lint:deps`，违规阻断合并。
+`clean-architecture-guide.md` §1-§4。Argo repo gate 以 `spark/fides-ci`
+运行 `pnpm lint:deps` 并回写 GitHub required status，违规阻断合并。
