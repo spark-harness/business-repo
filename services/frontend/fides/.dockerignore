@@ -1,0 +1,8 @@
+.git/
+**/.next/
+**/node_modules/
+services/frontend/fides/.next/
+services/frontend/fides/node_modules/
+.env
+dependency-graph.svg
+*.log
