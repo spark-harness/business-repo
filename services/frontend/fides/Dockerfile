@@ -24,11 +24,17 @@ ENV PNPM_CONFIG_IGNORE_SCRIPTS=true
 ENV NEXT_PUBLIC_FIDES_OTP_ADAPTER=${NEXT_PUBLIC_FIDES_OTP_ADAPTER}
 ENV NEXT_PUBLIC_FIDES_BFF_BASE_URL=${NEXT_PUBLIC_FIDES_BFF_BASE_URL}
 RUN mkdir -p public && pnpm build
+RUN patched_picomatch="$(find node_modules/.pnpm -path '*/node_modules/picomatch/package.json' -print -quit)" \
+    && test -n "${patched_picomatch}" \
+    && patched_picomatch_dir="$(dirname "${patched_picomatch}")" \
+    && grep -q '"version": "4.0.4"' "${patched_picomatch}" \
+    && find .next/standalone -path '*/next/dist/compiled/picomatch' -type d -exec sh -c 'rm -rf "$1" && mkdir -p "$1" && cp -R "$2"/. "$1"/' sh {} "${patched_picomatch_dir}" \;
 
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 RUN addgroup -S nextjs && adduser -S nextjs -G nextjs
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 RUN mkdir -p ./public
 COPY --from=build /workspace/services/frontend/fides/public ./public
 COPY --from=build --chown=nextjs:nextjs /workspace/services/frontend/fides/.next/standalone ./
