@@ -18,9 +18,9 @@ RUN --mount=type=secret,id=github_token \
     && mvn -B -f services/backend/applicant-api/pom.xml -DskipTests package spring-boot:repackage \
     && rm -f /root/.m2/settings.xml
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-RUN addgroup --system spark && adduser --system --ingroup spark spark
+RUN addgroup -S spark && adduser -S -G spark spark
 COPY --from=build /workspace/services/backend/applicant-api/target/applicant-api-*.jar /app/applicant-api.jar
 USER spark
 EXPOSE 8080 9090

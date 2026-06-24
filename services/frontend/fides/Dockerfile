@@ -11,7 +11,11 @@ RUN --mount=type=secret,id=github_token \
     && export GIT_CONFIG_VALUE_0="git@github.com:" \
     && export GIT_CONFIG_KEY_1="url.https://x-access-token:${token}@github.com/.insteadOf" \
     && export GIT_CONFIG_VALUE_1="ssh://git@github.com/" \
-    && pnpm install --frozen-lockfile --ignore-scripts
+    && for attempt in 1 2 3; do \
+        pnpm install --frozen-lockfile --ignore-scripts && break; \
+        if [ "${attempt}" = "3" ]; then exit 1; fi; \
+        sleep 5; \
+    done
 COPY services/frontend/fides ./
 ARG NEXT_PUBLIC_FIDES_OTP_ADAPTER=real
 ARG NEXT_PUBLIC_FIDES_BFF_BASE_URL=/api/v1
