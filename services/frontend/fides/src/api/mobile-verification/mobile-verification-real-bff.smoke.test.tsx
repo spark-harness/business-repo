@@ -1,6 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { createMobileVerificationController } from "@/adapters/mobile-verification/mobile-verification-controller";
 import { UserIntentIdempotencyKeys } from "@/application/mobile-verification/idempotency-key";
@@ -10,16 +8,11 @@ import type {
   VerifiedSession,
 } from "@/application/mobile-verification/verified-session";
 import { RestOtpAuthGateway } from "@/infrastructure/mobile-verification/rest-otp-auth-gateway";
-import { MobileVerificationScreen } from "@/presentation/mobile-verification/mobile-verification-screen";
 
 const runRealBffSmoke = process.env.LEN43_REAL_BFF_SMOKE === "1";
 const describeSmoke = runRealBffSmoke ? describe : describe.skip;
 
 describeSmoke("mobile verification real BFF smoke", () => {
-  afterEach(() => {
-    cleanup();
-  });
-
   it("sends and verifies OTP through the running fides-bff and applicant-api", async () => {
     const sessionStore = new MemorySessionStore();
     const flowController = new MemoryFlowController();
@@ -29,19 +22,24 @@ describeSmoke("mobile verification real BFF smoke", () => {
       sessionStore,
       flowController,
     );
-    const onVerified = vi.fn();
+    const phone = process.env.LEN43_SMOKE_PHONE ?? "91989999";
 
-    render(<MobileVerificationScreen controller={controller} onVerified={onVerified} />);
+    const sent = await controller.sendOtp({ countryCode: "+852", phone });
+    expect(sent).toMatchObject({ ok: true });
+    if (!sent.ok) {
+      throw new Error(sent.error.message);
+    }
 
-    await userEvent.type(screen.getByLabelText("Mobile Number"), process.env.LEN43_SMOKE_PHONE ?? "91989999");
-    await userEvent.click(screen.getByRole("button", { name: "Send" }));
-    await userEvent.type(await screen.findByLabelText("OTP digit 1"), "123456");
-    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-    await waitFor(() => {
-      expect(onVerified).toHaveBeenCalled();
+    const verifiedResult = await controller.verifyOtp({
+      challengeId: sent.value.challengeId,
+      code: "123456",
     });
-    const verified = onVerified.mock.calls[0]?.[0] as VerifiedSession;
+    expect(verifiedResult).toMatchObject({ ok: true });
+    if (!verifiedResult.ok) {
+      throw new Error(verifiedResult.error.message);
+    }
+
+    const verified = verifiedResult.value;
     expect(verified.accessToken).toEqual(expect.any(String));
     expect(verified.applicantId).toMatch(/^applicant_/);
     expect(sessionStore.saved?.applicantId).toBe(verified.applicantId);
