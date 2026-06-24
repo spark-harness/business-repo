@@ -32,6 +32,7 @@ type contextKey string
 const (
 	traceIDKey       contextKey = "bffkit.trace_id"
 	correlationIDKey contextKey = "bffkit.correlation_id"
+	httpRequestKey   contextKey = "bffkit.http_request"
 )
 
 type AccessLogger interface {
@@ -74,6 +75,7 @@ func TraceFilter(logger AccessLogger) khttp.FilterFunc {
 			)
 			ctx = ContextWithTraceID(ctx, traceID)
 			ctx = ContextWithCorrelationID(ctx, correlationID)
+			ctx = ContextWithHTTPRequest(ctx, r)
 
 			w.Header().Set(HeaderTraceID, traceID)
 			w.Header().Set(HeaderCorrelationID, correlationID)
@@ -164,6 +166,15 @@ func ContextWithCorrelationID(ctx context.Context, correlationID string) context
 func CorrelationIDFromContext(ctx context.Context) (string, bool) {
 	correlationID, ok := ctx.Value(correlationIDKey).(string)
 	return correlationID, ok && correlationID != ""
+}
+
+func ContextWithHTTPRequest(ctx context.Context, request *http.Request) context.Context {
+	return context.WithValue(ctx, httpRequestKey, request)
+}
+
+func HTTPRequestFromContext(ctx context.Context) (*http.Request, bool) {
+	request, ok := ctx.Value(httpRequestKey).(*http.Request)
+	return request, ok && request != nil
 }
 
 func OutgoingGRPCContext(ctx context.Context) context.Context {

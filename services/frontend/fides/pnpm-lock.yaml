@@ -20,6 +20,9 @@ importers:
       '@opentelemetry/sdk-trace-web':
         specifier: ^2.8.0
         version: 2.8.0(@opentelemetry/api@1.9.1)
+      '@spark-harness/fides-bff-client':
+        specifier: git+ssh://git@github.com/spark-harness/idl-ts-repo.git#semver:v0.1.0-len98.3
+        version: git+https://git@github.com:spark-harness/idl-ts-repo.git#5f2def1f99a4903eb22cb5cdcf632b3e65487e95
       next:
         specifier: 16.2.6
         version: 16.2.6(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -673,6 +676,10 @@ packages:
 
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
+
+  '@spark-harness/fides-bff-client@git+https://git@github.com:spark-harness/idl-ts-repo.git#5f2def1f99a4903eb22cb5cdcf632b3e65487e95':
+    resolution: {commit: 5f2def1f99a4903eb22cb5cdcf632b3e65487e95, repo: git@github.com:spark-harness/idl-ts-repo.git, type: git}
+    version: 0.1.0
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -3161,6 +3168,8 @@ snapshots:
   '@rolldown/pluginutils@1.0.1': {}
 
   '@rtsao/scc@1.1.0': {}
+
+  '@spark-harness/fides-bff-client@git+https://git@github.com:spark-harness/idl-ts-repo.git#5f2def1f99a4903eb22cb5cdcf632b3e65487e95': {}
 
   '@standard-schema/spec@1.1.0': {}
 
