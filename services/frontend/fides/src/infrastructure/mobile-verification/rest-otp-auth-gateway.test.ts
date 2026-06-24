@@ -133,6 +133,22 @@ describe("RestOtpAuthGateway", () => {
     });
   });
 
+  it("rejects incomplete success envelopes", async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ expiresInSec: 300 }));
+    const gateway = new RestOtpAuthGateway("/api/v1", fetcher);
+
+    await expect(
+      gateway.sendOtp({
+        countryCode: "+852",
+        phone: "91234567",
+        idempotencyKey: "send-key",
+      }),
+    ).rejects.toMatchObject({
+      code: "system_error",
+      message: "Incomplete BFF response",
+    });
+  });
+
   it("preserves expired-code error envelopes", async () => {
     const fetcher = vi.fn().mockResolvedValue(
       jsonResponse(

@@ -11,116 +11,197 @@ import type {
 import { context, trace } from "@opentelemetry/api";
 import type { Context } from "@opentelemetry/api";
 import { W3CTraceContextPropagator } from "@opentelemetry/core";
+import {
+  Configuration,
+  FidesBffAuthServiceApi,
+  type RefreshTokenResponse,
+  ResponseError,
+  type SendOtpResponse,
+  type VerifyOtpResponse,
+} from "@spark-harness/idl-ts-client/vesta/lendora/fides-bff/v1";
 import { activeContext } from "@/infrastructure/observability/browser-tracing";
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+type FidesBffApiFactory = (configuration: Configuration) => FidesBffAuthServiceApi;
 
 export class RestOtpAuthGateway implements OtpAuthGateway {
+  private readonly client: FidesBffAuthServiceApi;
+  private idempotencyKey = "";
+
   constructor(
-    private readonly baseUrl = "/api/v1",
-    private readonly fetcher: Fetcher = defaultFetch,
-    private readonly timeoutMs = 10000,
-  ) {}
+    baseUrl = "/api/v1",
+    fetcher: Fetcher = defaultFetch,
+    timeoutMs = 10000,
+    clientFactory: FidesBffApiFactory = (configuration) => new FidesBffAuthServiceApi(configuration),
+  ) {
+    this.client = clientFactory(
+      new Configuration({
+        basePath: generatedClientBasePath(baseUrl),
+        fetchApi: timeoutFetch(fetcher, timeoutMs) as typeof fetch,
+        middleware: [
+          {
+            pre: async ({ url, init }) => ({
+              url,
+              init: requestInitWithTraceHeaders(init, this.traceHeaders(this.idempotencyKey)),
+            }),
+          },
+        ],
+      }),
+    );
+  }
 
   async sendOtp(command: SendOtpCommand): Promise<SendOtpResult> {
-    return this.post<SendOtpResult>(
-      "/auth/otp:send",
-      {
-        countryCode: command.countryCode,
-        phone: command.phone,
-      },
-      command.idempotencyKey,
+    return this.call(command.idempotencyKey, async () =>
+      toSendOtpResult(await this.client.fidesBffAuthServiceSendOtp({
+        sendOtpRequest: {
+          countryCode: command.countryCode,
+          phone: command.phone,
+        },
+      })),
     );
   }
 
   async verifyOtp(command: VerifyOtpCommand): Promise<VerifyOtpResult> {
-    return this.post<VerifyOtpResult>(
-      "/auth/otp:verify",
-      {
-        challengeId: command.challengeId,
-        code: command.code,
-      },
-      command.idempotencyKey,
+    return this.call(command.idempotencyKey, async () =>
+      toVerifyOtpResult(await this.client.fidesBffAuthServiceVerifyOtp({
+        verifyOtpRequest: {
+          challengeId: command.challengeId,
+          code: command.code,
+        },
+      })),
     );
   }
 
   async refreshToken(command: RefreshTokenCommand): Promise<RefreshTokenResult> {
-    return this.post<RefreshTokenResult>(
-      "/auth/token:refresh",
-      {
-        refreshToken: command.refreshToken,
-      },
-      command.idempotencyKey,
+    return this.call(command.idempotencyKey, async () =>
+      toRefreshTokenResult(await this.client.fidesBffAuthServiceRefreshToken({
+        refreshTokenRequest: {
+          refreshToken: command.refreshToken,
+        },
+      })),
     );
   }
 
-  private async post<T>(
-    path: string,
-    body: Record<string, string>,
-    idempotencyKey: string,
-  ): Promise<T> {
-    const response = await this.postWithOptionalTracing(path, body, idempotencyKey);
-
-    const payload = await readJson(response);
-    if (!response.ok) {
-      throw normalizeBffError(payload, response.status, response.headers);
-    }
-
-    return payload as T;
-  }
-
-  private async postWithOptionalTracing<T>(
-    path: string,
-    body: Record<string, string>,
-    idempotencyKey: string,
-  ): Promise<Response> {
+  private async call<T>(idempotencyKey: string, operation: () => Promise<T>): Promise<T> {
+    this.idempotencyKey = idempotencyKey;
     try {
-      const baseContext = activeContext();
-      const tracer = trace.getTracer("fides.mobile-verification");
-      const span = tracer.startSpan(`POST ${path}`);
-      const requestContext = trace.setSpan(baseContext, span);
-      return await context.with(requestContext, async () => {
-        try {
-          return await this.fetchWithTimeout(path, body, traceHeaders(idempotencyKey, requestContext));
-        } finally {
-          span.end();
-        }
-      });
+      return await operation();
     } catch (error) {
-      if (isNetworkError(error)) {
-        throw error;
+      if (error instanceof ResponseError) {
+        throw await normalizeBffError(error);
       }
-      return this.fetchWithTimeout(path, body, baseHeaders(idempotencyKey));
-    }
-  }
-
-  private async fetchWithTimeout(
-    path: string,
-    body: Record<string, string>,
-    headers: Record<string, string>,
-  ): Promise<Response> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      return await this.fetcher(`${this.baseUrl}${path}`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-    } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         throw { code: "network_timeout", message: "Request timed out" };
       }
       throw error;
     } finally {
-      clearTimeout(timeout);
+      this.idempotencyKey = "";
+    }
+  }
+
+  private traceHeaders(idempotencyKey: string): Record<string, string> {
+    try {
+      const baseContext = activeContext();
+      const tracer = trace.getTracer("fides.mobile-verification");
+      const span = tracer.startSpan("POST fides-bff");
+      const requestContext = trace.setSpan(baseContext, span);
+      return context.with(requestContext, () => {
+        try {
+          return traceHeaders(idempotencyKey, requestContext);
+        } finally {
+          span.end();
+        }
+      });
+    } catch {
+      return baseHeaders(idempotencyKey);
     }
   }
 }
 
 function defaultFetch(input: RequestInfo | URL, init?: RequestInit) {
   return fetch(input, init);
+}
+
+function generatedClientBasePath(baseUrl: string): string {
+  return baseUrl.replace(/\/api\/v1\/?$/, "");
+}
+
+function toSendOtpResult(response: SendOtpResponse): SendOtpResult {
+  assertString(response.challengeId);
+  assertNumber(response.expiresInSec);
+  assertNumber(response.resendAfterSec);
+  return {
+    challengeId: response.challengeId,
+    expiresInSec: response.expiresInSec,
+    resendAfterSec: response.resendAfterSec,
+  };
+}
+
+function toVerifyOtpResult(response: VerifyOtpResponse): VerifyOtpResult {
+  assertString(response.accessToken);
+  assertString(response.applicantId);
+  assertNumber(response.expiresInSec);
+  return {
+    accessToken: response.accessToken,
+    refreshToken: response.refreshToken,
+    applicantId: response.applicantId,
+    expiresInSec: response.expiresInSec,
+    refreshExpiresInSec: response.refreshExpiresInSec,
+  };
+}
+
+function toRefreshTokenResult(response: RefreshTokenResponse): RefreshTokenResult {
+  assertString(response.accessToken);
+  assertNumber(response.expiresInSec);
+  return {
+    accessToken: response.accessToken,
+    expiresInSec: response.expiresInSec,
+  };
+}
+
+function assertString(value: unknown): asserts value is string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw incompleteBffResponse();
+  }
+}
+
+function assertNumber(value: unknown): asserts value is number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw incompleteBffResponse();
+  }
+}
+
+function incompleteBffResponse(): BffOtpError {
+  return { code: "system_error", message: "Incomplete BFF response" };
+}
+
+function requestInitWithTraceHeaders(init: RequestInit, headers: Record<string, string>): RequestInit {
+  const nextInit: RequestInit = {
+    ...init,
+    headers: {
+      ...(init.headers as Record<string, string> | undefined),
+      ...headers,
+    },
+  };
+  if (nextInit.credentials === undefined) {
+    delete nextInit.credentials;
+  }
+  return nextInit;
+}
+
+function timeoutFetch(fetcher: Fetcher, timeoutMs: number): Fetcher {
+  return async (input, init) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetcher(input, {
+        ...init,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
 }
 
 function traceHeaders(idempotencyKey: string, requestContext: Context): Record<string, string> {
@@ -143,68 +224,55 @@ function traceHeaders(idempotencyKey: string, requestContext: Context): Record<s
 
 function baseHeaders(idempotencyKey: string): Record<string, string> {
   return {
-    "Content-Type": "application/json",
     "Idempotency-Key": idempotencyKey,
   };
 }
 
-function isNetworkError(error: unknown): boolean {
-  return (
-    error instanceof DOMException ||
-    (error !== null &&
-      typeof error === "object" &&
-      "code" in error &&
-      typeof (error as { code?: unknown }).code === "string")
-  );
-}
-
-async function readJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json();
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeBffError(
-  payload: unknown,
-  status: number,
-  headers: Headers,
-): BffOtpError {
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "error" in payload &&
-    payload.error &&
-    typeof payload.error === "object"
-  ) {
-    const error = payload.error as Record<string, unknown>;
-    return {
-      code: String(error.code ?? "unknown"),
-      message: typeof error.message === "string" ? error.message : undefined,
-      traceId: typeof error.traceId === "string" ? error.traceId : undefined,
-      retryAfterSec:
-        typeof error.retryAfterSec === "number" ? error.retryAfterSec : undefined,
-    };
-  }
-
-  if (status === 401) {
+async function normalizeBffError(error: ResponseError): Promise<BffOtpError> {
+  const envelope = await readErrorEnvelope(error.response);
+  if (envelope.code === "unknown" && error.response.status === 401) {
     return { code: "unauthorized" };
   }
-  if (status === 429) {
-    return {
-      code: "otp_cooldown_active",
-      retryAfterSec: parseRetryAfter(headers.get("Retry-After")),
-    };
+  if (envelope.code === "unknown" && error.response.status === 429) {
+    return { code: "otp_cooldown_active", retryAfterSec: retryAfter(error.response.headers) };
   }
-  if (status >= 500) {
+  if (envelope.code === "system_error") {
     return { code: "system_error" };
   }
-
-  return { code: "unknown", message: "Request failed" };
+  return {
+    code: envelope.code,
+    message: envelope.message,
+    traceId: envelope.traceId,
+    retryAfterSec: envelope.retryAfterSec,
+  };
 }
 
-function parseRetryAfter(value: string | null): number | undefined {
+async function readErrorEnvelope(response: Response): Promise<BffOtpError> {
+  try {
+    const payload = (await response.json()) as unknown;
+    if (
+      payload &&
+      typeof payload === "object" &&
+      "error" in payload &&
+      payload.error &&
+      typeof payload.error === "object"
+    ) {
+      const error = payload.error as Record<string, unknown>;
+      return {
+        code: String(error.code ?? "unknown"),
+        message: typeof error.message === "string" ? error.message : undefined,
+        traceId: typeof error.traceId === "string" ? error.traceId : undefined,
+        retryAfterSec: typeof error.retryAfterSec === "number" ? error.retryAfterSec : retryAfter(response.headers),
+      };
+    }
+  } catch {
+    // Preserve bare HTTP status mapping below.
+  }
+  return { code: response.status >= 500 ? "system_error" : "unknown", retryAfterSec: retryAfter(response.headers) };
+}
+
+function retryAfter(headers: Headers): number | undefined {
+  const value = headers.get("Retry-After");
   if (!value) {
     return undefined;
   }

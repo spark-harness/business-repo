@@ -18,7 +18,8 @@
     "@opentelemetry/sdk-trace-web": "^2.8.0",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "@spark-harness/idl-ts-client": "git+ssh://git@github.com/spark-harness/idl-ts-repo.git#semver:v0.1.0-len98.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

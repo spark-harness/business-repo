@@ -1,17 +1,19 @@
 package service
 
 import (
+	"context"
 	"errors"
 	nethttp "net/http"
 	"time"
 
-	"github.com/go-kratos/kratos/v2/transport/http"
+	fidesbffv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/fides-bff/v1"
 	"github.com/spark/bffkit"
 
 	"github.com/spark/fides-bff/internal/biz"
 )
 
 type AuthService struct {
+	fidesbffv1pb.UnimplementedFidesBffAuthServiceServer
 	uc *biz.AuthUsecase
 }
 
@@ -19,101 +21,60 @@ func NewAuthService(uc *biz.AuthUsecase) *AuthService {
 	return &AuthService{uc: uc}
 }
 
-type sendOtpRequest struct {
-	CountryCode string `json:"countryCode"`
-	Phone       string `json:"phone"`
-}
-
-type sendOtpResponse struct {
-	ChallengeID    string `json:"challengeId"`
-	ExpiresInSec   int32  `json:"expiresInSec"`
-	ResendAfterSec int32  `json:"resendAfterSec"`
-}
-
-type verifyOtpRequest struct {
-	ChallengeID string `json:"challengeId"`
-	Code        string `json:"code"`
-}
-
-type verifyOtpResponse struct {
-	AccessToken         string `json:"accessToken"`
-	RefreshToken        string `json:"refreshToken,omitempty"`
-	ApplicantID         string `json:"applicantId"`
-	ExpiresInSec        int32  `json:"expiresInSec"`
-	RefreshExpiresInSec int32  `json:"refreshExpiresInSec,omitempty"`
-}
-
-type refreshTokenRequest struct {
-	RefreshToken string `json:"refreshToken"`
-}
-
-type refreshTokenResponse struct {
-	AccessToken  string `json:"accessToken"`
-	ExpiresInSec int32  `json:"expiresInSec"`
-}
-
-func (s *AuthService) SendOtp(ctx http.Context) error {
-	var req sendOtpRequest
-	if err := ctx.Bind(&req); err != nil {
-		return err
-	}
+func (s *AuthService) SendOtp(ctx context.Context, req *fidesbffv1pb.SendOtpRequest) (*fidesbffv1pb.SendOtpResponse, error) {
 	result, err := s.uc.SendOtp(ctx, biz.SendOtpCommand{
-		CountryCode:    req.CountryCode,
-		Phone:          req.Phone,
+		CountryCode:    req.GetCountryCode(),
+		Phone:          req.GetPhone(),
 		IdempotencyKey: idempotencyKey(ctx),
 	})
 	if err != nil {
-		return toHTTPError(err)
+		return nil, toHTTPError(err)
 	}
-	return ctx.JSON(nethttp.StatusOK, sendOtpResponse{
-		ChallengeID:    result.ChallengeID,
+	return &fidesbffv1pb.SendOtpResponse{
+		ChallengeId:    result.ChallengeID,
 		ExpiresInSec:   seconds(result.ExpiresIn),
 		ResendAfterSec: seconds(result.ResendAfter),
-	})
+	}, nil
 }
 
-func (s *AuthService) VerifyOtp(ctx http.Context) error {
-	var req verifyOtpRequest
-	if err := ctx.Bind(&req); err != nil {
-		return err
-	}
+func (s *AuthService) VerifyOtp(ctx context.Context, req *fidesbffv1pb.VerifyOtpRequest) (*fidesbffv1pb.VerifyOtpResponse, error) {
 	result, err := s.uc.VerifyOtp(ctx, biz.VerifyOtpCommand{
-		ChallengeID:    req.ChallengeID,
-		Code:           req.Code,
+		ChallengeID:    req.GetChallengeId(),
+		Code:           req.GetCode(),
 		IdempotencyKey: idempotencyKey(ctx),
 	})
 	if err != nil {
-		return toHTTPError(err)
+		return nil, toHTTPError(err)
 	}
-	return ctx.JSON(nethttp.StatusOK, verifyOtpResponse{
+	return &fidesbffv1pb.VerifyOtpResponse{
 		AccessToken:         result.AccessToken,
 		RefreshToken:        result.RefreshToken,
-		ApplicantID:         result.ApplicantID,
+		ApplicantId:         result.ApplicantID,
 		ExpiresInSec:        seconds(result.ExpiresIn),
 		RefreshExpiresInSec: seconds(result.RefreshExpiresIn),
-	})
+	}, nil
 }
 
-func (s *AuthService) RefreshToken(ctx http.Context) error {
-	var req refreshTokenRequest
-	if err := ctx.Bind(&req); err != nil {
-		return err
-	}
+func (s *AuthService) RefreshToken(ctx context.Context, req *fidesbffv1pb.RefreshTokenRequest) (*fidesbffv1pb.RefreshTokenResponse, error) {
 	result, err := s.uc.RefreshToken(ctx, biz.RefreshTokenCommand{
-		RefreshToken:   req.RefreshToken,
+		RefreshToken:   req.GetRefreshToken(),
 		IdempotencyKey: idempotencyKey(ctx),
 	})
 	if err != nil {
-		return toHTTPError(err)
+		return nil, toHTTPError(err)
 	}
-	return ctx.JSON(nethttp.StatusOK, refreshTokenResponse{
+	return &fidesbffv1pb.RefreshTokenResponse{
 		AccessToken:  result.AccessToken,
 		ExpiresInSec: seconds(result.ExpiresIn),
-	})
+	}, nil
 }
 
-func idempotencyKey(ctx http.Context) string {
-	return ctx.Request().Header.Get(bffkit.HeaderIdempotencyKey)
+func idempotencyKey(ctx context.Context) string {
+	request, ok := bffkit.HTTPRequestFromContext(ctx)
+	if !ok {
+		return ""
+	}
+	return request.Header.Get(bffkit.HeaderIdempotencyKey)
 }
 
 func seconds(value time.Duration) int32 {

@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/transport/http"
+	fidesbffv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/fides-bff/v1"
 	"github.com/spark/bffkit"
 
 	"github.com/spark/fides-bff/internal/conf"
@@ -29,8 +30,6 @@ func NewHTTPServer(c *conf.Server, health *service.HealthService, auth *service.
 
 	v1 := srv.Route("/api/v1")
 	v1.GET("/health", health.Health)
-	v1.POST("/auth/otp:send", auth.SendOtp)
-	v1.POST("/auth/otp:verify", auth.VerifyOtp)
-	v1.POST("/auth/token:refresh", auth.RefreshToken)
+	fidesbffv1pb.RegisterFidesBffAuthServiceHTTPServer(srv, auth)
 	return srv
 }
