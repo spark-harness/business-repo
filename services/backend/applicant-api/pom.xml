@@ -14,7 +14,7 @@
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <spring-boot.version>3.3.6</spring-boot.version>
+    <spring-boot.version>3.5.14</spring-boot.version>
     <spark.common.version>0.1.0-SNAPSHOT</spark.common.version>
     <spark.contract.version>0.2.1</spark.contract.version>
     <grpc-java.version>1.81.0</grpc-java.version>
