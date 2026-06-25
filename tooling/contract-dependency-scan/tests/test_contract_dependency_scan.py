@@ -4,9 +4,10 @@ import unittest
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = REPO_ROOT / "scripts" / "contract_dependency_scan.py"
-FIXTURES = REPO_ROOT / "tests" / "contract_dependency_scan" / "fixtures"
+TOOL_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = TOOL_ROOT.parents[1]
+SCRIPT = TOOL_ROOT / "contract_dependency_scan.py"
+FIXTURES = TOOL_ROOT / "fixtures"
 
 
 class ContractDependencyScanTest(unittest.TestCase):
