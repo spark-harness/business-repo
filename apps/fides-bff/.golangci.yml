@@ -6,8 +6,66 @@ run:
 linters:
   default: standard
   enable:
+    - depguard
+    - loggercheck
     - misspell
+    - sloglint
     - unconvert
+  settings:
+    depguard:
+      rules:
+        biz_layer:
+          list-mode: lax
+          files:
+            - "**/internal/biz/**/*.go"
+          deny:
+            - pkg: github.com/go-kratos/kratos/v2
+              desc: "biz must stay independent from Kratos framework APIs"
+            - pkg: github.com/spark-harness/idl-go-repo
+              desc: "biz must not depend on generated protobuf DTOs"
+            - pkg: github.com/spark/fides-bff/internal/conf
+              desc: "biz must not depend on runtime configuration"
+            - pkg: github.com/spark/fides-bff/internal/data
+              desc: "biz must not depend on data implementations"
+            - pkg: github.com/spark/fides-bff/internal/observability
+              desc: "biz must not depend on observability implementation"
+            - pkg: github.com/spark/fides-bff/internal/server
+              desc: "biz must not depend on server adapters"
+            - pkg: github.com/spark/fides-bff/internal/service
+              desc: "biz must not depend on service adapters"
+            - pkg: go.opentelemetry.io/otel
+              desc: "biz must stay independent from OTel APIs"
+            - pkg: google.golang.org/grpc
+              desc: "biz must stay independent from gRPC APIs"
+        service_layer:
+          list-mode: lax
+          files:
+            - "**/internal/service/**/*.go"
+          deny:
+            - pkg: github.com/spark-harness/idl-go-repo/vesta/lendora/applicant/v1
+              desc: "service must not call applicant downstream contracts directly"
+            - pkg: github.com/spark/fides-bff/internal/data
+              desc: "service must depend on biz ports instead of data implementations"
+            - pkg: github.com/spark/fides-bff/internal/observability
+              desc: "service must not depend on observability implementation"
+            - pkg: github.com/spark/fides-bff/internal/server
+              desc: "service must not depend on server adapters"
+        data_layer:
+          list-mode: lax
+          files:
+            - "**/internal/data/**/*.go"
+          deny:
+            - pkg: github.com/spark/fides-bff/internal/server
+              desc: "data must not depend on server adapters"
+            - pkg: github.com/spark/fides-bff/internal/service
+              desc: "data must not depend on service adapters"
+        server_layer:
+          list-mode: lax
+          files:
+            - "**/internal/server/**/*.go"
+          deny:
+            - pkg: github.com/spark/fides-bff/internal/data
+              desc: "server must not depend on data implementations"
 
 formatters:
   enable:
