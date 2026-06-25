@@ -35,7 +35,7 @@ require (
 	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa // indirect
 )
 
-replace github.com/spark/bffkit => ../../../packages/bffkit
+replace github.com/spark/bffkit => ../../packages/go/bffkit
 
 require (
 	dario.cat/mergo v1.0.0 // indirect

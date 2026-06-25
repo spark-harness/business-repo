@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1.7
 FROM node:22-alpine AS build
-WORKDIR /workspace/services/frontend/fides
+WORKDIR /workspace/apps/fides-web
 RUN apk add --no-cache git
 RUN corepack enable && corepack prepare pnpm@11.8.0 --activate
-COPY services/frontend/fides/package.json services/frontend/fides/pnpm-lock.yaml services/frontend/fides/pnpm-workspace.yaml ./
+COPY apps/fides-web/package.json apps/fides-web/pnpm-lock.yaml apps/fides-web/pnpm-workspace.yaml ./
 RUN --mount=type=secret,id=github_token \
     token="$(cat /run/secrets/github_token)" \
     && export GIT_CONFIG_COUNT=2 \
@@ -16,7 +16,7 @@ RUN --mount=type=secret,id=github_token \
         if [ "${attempt}" = "3" ]; then exit 1; fi; \
         sleep 5; \
     done
-COPY services/frontend/fides ./
+COPY apps/fides-web ./
 ARG NEXT_PUBLIC_FIDES_OTP_ADAPTER=real
 ARG NEXT_PUBLIC_FIDES_BFF_BASE_URL=/api/v1
 ENV CI=true
@@ -36,9 +36,9 @@ ENV NODE_ENV=production
 RUN addgroup -S nextjs && adduser -S nextjs -G nextjs
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 RUN mkdir -p ./public
-COPY --from=build /workspace/services/frontend/fides/public ./public
-COPY --from=build --chown=nextjs:nextjs /workspace/services/frontend/fides/.next/standalone ./
-COPY --from=build --chown=nextjs:nextjs /workspace/services/frontend/fides/.next/static ./.next/static
+COPY --from=build /workspace/apps/fides-web/public ./public
+COPY --from=build --chown=nextjs:nextjs /workspace/apps/fides-web/.next/standalone ./
+COPY --from=build --chown=nextjs:nextjs /workspace/apps/fides-web/.next/static ./.next/static
 USER nextjs
 EXPOSE 3000
 CMD ["node", "server.js"]

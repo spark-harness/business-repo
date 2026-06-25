@@ -252,7 +252,7 @@ def scan_go_mod(path, config, mode):
 def should_ignore(path, root):
     ignored_parts = {".git", "target", "build", "node_modules", ".next", "dist", "__pycache__"}
     relative_parts = path.relative_to(root).parts
-    if relative_parts[:3] == ("tests", "contract_dependency_scan", "fixtures"):
+    if relative_parts[:3] == ("tooling", "contract-dependency-scan", "fixtures"):
         return True
     return bool(ignored_parts.intersection(relative_parts))
 
