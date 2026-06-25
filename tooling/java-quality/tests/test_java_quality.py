@@ -125,6 +125,23 @@ class JavaQualityTest(unittest.TestCase):
             self.assertIn("JAVA_PROJECT_SELECT spring-starter", result.stdout)
             self.assertIn("JAVA_PROJECT_SELECT applicant-api", result.stdout)
 
+    def test_maven_command_uses_workspace_local_repository(self):
+        import importlib.util
+
+        module_name = "java_quality_maven_repo_test"
+        spec = importlib.util.spec_from_file_location(module_name, SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        self.assertIsNotNone(spec.loader)
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(module_name, None)
+
+        command = module.maven_command("applicant-api", "verify")
+
+        self.assertIn(f"-Dmaven.repo.local={module.MAVEN_REPO_LOCAL}", command)
+
 
 if __name__ == "__main__":
     unittest.main()

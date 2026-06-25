@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from pathlib import Path
 TOOL_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = TOOL_ROOT.parents[1]
 CONFIG_DIR = TOOL_ROOT / "config"
+MAVEN_REPO_LOCAL = Path(os.environ.get("MAVEN_REPO_LOCAL", REPO_ROOT.parent / ".m2" / "repository"))
 
 
 @dataclass(frozen=True)
@@ -203,6 +205,7 @@ def maven_command(project_name: str, goal: str) -> list[str]:
     base = [
         "mvn",
         "-B",
+        f"-Dmaven.repo.local={MAVEN_REPO_LOCAL}",
         "-f",
         project.pom,
         f"-Djava.quality.config.dir={CONFIG_DIR}",
