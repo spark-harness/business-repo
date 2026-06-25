@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+  <Match>
+    <Class name="com.spark.applicant.adapter.inbound.grpc.ApplicantAuthGrpcAdapter$TraceMetadataServerInterceptor"/>
+    <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION"/>
+  </Match>
+  <Match>
+    <Class name="com.spark.applicant.adapter.inbound.grpc.ApplicantAuthTelemetry"/>
+    <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION"/>
+  </Match>
+  <Match>
+    <Class name="com.spark.applicant.bootstrap.ApplicantAuthProperties"/>
+    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="com.spark.applicant.infrastructure.auth.JdbcApplicantRepository"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+</FindBugsFilter>

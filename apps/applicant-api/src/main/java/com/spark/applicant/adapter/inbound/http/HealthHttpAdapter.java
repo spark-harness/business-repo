@@ -16,7 +16,7 @@ public class HealthHttpAdapter {
     private final List<RuntimeDependencyProbe> dependencyProbes;
 
     public HealthHttpAdapter(List<RuntimeDependencyProbe> dependencyProbes) {
-        this.dependencyProbes = dependencyProbes;
+        this.dependencyProbes = List.copyOf(dependencyProbes);
     }
 
     @GetMapping("/health")

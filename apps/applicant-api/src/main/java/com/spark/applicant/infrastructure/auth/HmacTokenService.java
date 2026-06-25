@@ -4,6 +4,8 @@ import com.spark.applicant.application.auth.port.TokenService;
 import com.spark.applicant.bootstrap.ApplicantAuthProperties;
 import com.spark.common.spring.cleanarchitecture.annotation.InfrastructureAdapter;
 import java.nio.charset.StandardCharsets;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.util.Base64;
 import java.util.UUID;
@@ -42,7 +44,7 @@ public class HmacTokenService implements TokenService {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(tokenSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
             return encode(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception error) {
+        } catch (InvalidKeyException | NoSuchAlgorithmException error) {
             throw new IllegalStateException("hmac token cannot be signed", error);
         }
     }

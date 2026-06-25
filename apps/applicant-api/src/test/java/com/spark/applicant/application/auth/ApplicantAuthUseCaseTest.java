@@ -3,8 +3,6 @@ package com.spark.applicant.application.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.spark.applicant.application.auth.port.ApplicantRepository;
-import com.spark.applicant.application.auth.port.OtpChallengeRepository;
 import com.spark.applicant.application.auth.port.SessionTokenStore;
 import com.spark.applicant.infrastructure.auth.InMemoryApplicantRepository;
 import com.spark.applicant.infrastructure.auth.InMemoryIdempotencyRepository;

@@ -17,7 +17,7 @@ public class GrpcServerLifecycle implements SmartLifecycle {
     private boolean running;
 
     public GrpcServerLifecycle(List<BindableService> services, int port, boolean reflectionEnabled) {
-        this.services = services;
+        this.services = List.copyOf(services);
         this.port = port;
         this.reflectionEnabled = reflectionEnabled;
     }
