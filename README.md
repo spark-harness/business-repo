@@ -45,6 +45,7 @@ business-repo/
 当前工具：
 
 - `tooling/contract-dependency-scan`：契约依赖版本扫描。
+- `tooling/java-quality`：Java 项目变更选择与 Maven 质量门禁。
 
 ## 边界
 
