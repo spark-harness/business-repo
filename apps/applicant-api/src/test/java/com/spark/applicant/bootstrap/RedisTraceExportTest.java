@@ -9,7 +9,6 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -61,7 +60,7 @@ class RedisTraceExportTest {
         redisTemplate.opsForValue().set("applicant-api:test:redis-trace", "ok");
         redisTemplate.opsForValue().get("applicant-api:test:redis-trace");
 
-        assertThat(traceReceiver.awaitTraceExport()).isTrue();
+        assertThat(traceReceiver.awaitTraceExportContaining("redis", "SET", "GET")).isTrue();
         assertThat(traceReceiver.traceBodies()).anySatisfy(body -> {
             String tracePayload = new String(body, StandardCharsets.ISO_8859_1);
             assertThat(tracePayload).contains("redis");
@@ -71,7 +70,6 @@ class RedisTraceExportTest {
 
     private static final class OtlpTraceReceiver {
         private final HttpServer server;
-        private final CountDownLatch latch = new CountDownLatch(1);
         private final List<byte[]> traceBodies = new ArrayList<>();
 
         private OtlpTraceReceiver(HttpServer server) {
@@ -94,8 +92,27 @@ class RedisTraceExportTest {
             return "http://localhost:" + server.getAddress().getPort() + "/v1/traces";
         }
 
-        boolean awaitTraceExport() throws InterruptedException {
-            return latch.await(10, TimeUnit.SECONDS);
+        boolean awaitTraceExportContaining(String... tokens) throws InterruptedException {
+            long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            synchronized (this) {
+                while (System.nanoTime() < deadlineNanos) {
+                    if (traceBodies.stream().anyMatch(body -> containsAnyToken(body, tokens))) {
+                        return true;
+                    }
+                    TimeUnit.NANOSECONDS.timedWait(this, Math.max(1, deadlineNanos - System.nanoTime()));
+                }
+                return traceBodies.stream().anyMatch(body -> containsAnyToken(body, tokens));
+            }
+        }
+
+        private boolean containsAnyToken(byte[] body, String... tokens) {
+            String tracePayload = new String(body, StandardCharsets.ISO_8859_1);
+            for (String token : tokens) {
+                if (tracePayload.contains(token)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         synchronized List<byte[]> traceBodies() {
@@ -110,8 +127,8 @@ class RedisTraceExportTest {
             byte[] requestBody = exchange.getRequestBody().readAllBytes();
             synchronized (this) {
                 traceBodies.add(requestBody);
+                notifyAll();
             }
-            latch.countDown();
             exchange.sendResponseHeaders(200, -1);
             exchange.close();
         }
