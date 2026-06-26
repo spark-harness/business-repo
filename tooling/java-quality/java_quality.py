@@ -13,6 +13,7 @@ from pathlib import Path
 TOOL_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = TOOL_ROOT.parents[1]
 CONFIG_DIR = TOOL_ROOT / "config"
+PROJECTS_CONFIG = TOOL_ROOT / "projects.yaml"
 MAVEN_REPO_LOCAL = Path(os.environ.get("MAVEN_REPO_LOCAL", REPO_ROOT.parent / ".m2" / "repository"))
 
 
@@ -24,28 +25,63 @@ class JavaProject:
     dependencies: tuple[str, ...] = ()
 
 
-PROJECTS = {
-    "money": JavaProject(
-        name="money",
-        path="packages/java/money",
-        pom="packages/java/money/pom.xml",
-    ),
-    "spring-starter": JavaProject(
-        name="spring-starter",
-        path="packages/java/spring-starter",
-        pom="packages/java/spring-starter/pom.xml",
-    ),
-    "applicant-api": JavaProject(
-        name="applicant-api",
-        path="apps/applicant-api",
-        pom="apps/applicant-api/pom.xml",
-        dependencies=("spring-starter",),
-    ),
-}
-
 QUALITY_PATHS = (
     "tooling/java-quality/",
 )
+
+
+def load_projects(config_path: Path = PROJECTS_CONFIG) -> dict[str, JavaProject]:
+    projects: dict[str, JavaProject] = {}
+    current: dict[str, str] | None = None
+
+    def commit_current() -> None:
+        nonlocal current
+        if current is None:
+            return
+        missing = [key for key in ("name", "path", "pom") if not current.get(key)]
+        if missing:
+            raise ValueError(f"{config_path} project is missing: {', '.join(missing)}")
+        dependencies = tuple(
+            dependency.strip()
+            for dependency in current.get("dependencies", "").split(",")
+            if dependency.strip()
+        )
+        project = JavaProject(
+            name=current["name"].strip(),
+            path=current["path"].strip(),
+            pom=current["pom"].strip(),
+            dependencies=dependencies,
+        )
+        if project.name in projects:
+            raise ValueError(f"{config_path} duplicate project: {project.name}")
+        projects[project.name] = project
+        current = None
+
+    for raw_line in config_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.split("#", 1)[0].rstrip()
+        if not line.strip() or line.strip() == "projects:":
+            continue
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            commit_current()
+            current = {}
+            stripped = stripped[2:].strip()
+            if not stripped:
+                continue
+        if current is None or ":" not in stripped:
+            raise ValueError(f"{config_path} has unsupported line: {raw_line}")
+        key, value = stripped.split(":", 1)
+        current[key.strip()] = value.strip().strip('"').strip("'")
+    commit_current()
+
+    for project in projects.values():
+        for dependency in project.dependencies:
+            if dependency not in projects:
+                raise ValueError(f"{config_path} project {project.name} depends on unknown project {dependency}")
+    return projects
+
+
+PROJECTS = load_projects()
 
 
 def normalize_path(path: str) -> str:

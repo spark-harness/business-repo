@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -49,7 +49,7 @@ describe("MobileVerificationScreen", () => {
   });
 
   it("counts cooldown down and allows resending a code", async () => {
-    const user = userEvent.setup();
+    vi.useFakeTimers();
     const controller = createController();
     controller.sendOtp = vi
       .fn()
@@ -71,22 +71,32 @@ describe("MobileVerificationScreen", () => {
       });
     render(<MobileVerificationScreen controller={controller} />);
 
-    await user.type(screen.getByLabelText("Mobile Number"), "9123 4567");
-    await user.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.change(screen.getByLabelText("Mobile Number"), {
+      target: { value: "9123 4567" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      await Promise.resolve();
+    });
 
-    expect(await screen.findByRole("button", { name: /Resend in 0:01/ })).toHaveProperty(
+    expect(screen.getByRole("button", { name: /Resend in 0:01/ })).toHaveProperty(
       "disabled",
       true,
     );
 
-    const resend = await screen.findByRole("button", { name: "Resend code" });
-    expect(resend).toHaveProperty("disabled", false);
-    await user.click(resend);
-
-    await waitFor(() => {
-      expect(controller.sendOtp).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
     });
-    expect(await screen.findByRole("button", { name: /Resend in 0:01/ })).toHaveProperty(
+
+    const resend = screen.getByRole("button", { name: "Resend code" });
+    expect(resend).toHaveProperty("disabled", false);
+    await act(async () => {
+      fireEvent.click(resend);
+      await Promise.resolve();
+    });
+
+    expect(controller.sendOtp).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("button", { name: /Resend in 0:01/ })).toHaveProperty(
       "disabled",
       true,
     );
