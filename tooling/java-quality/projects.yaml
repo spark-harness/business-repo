@@ -1,0 +1,11 @@
+projects:
+  - name: money
+    path: packages/java/money
+    pom: packages/java/money/pom.xml
+  - name: spring-starter
+    path: packages/java/spring-starter
+    pom: packages/java/spring-starter/pom.xml
+  - name: applicant-api
+    path: apps/applicant-api
+    pom: apps/applicant-api/pom.xml
+    dependencies: spring-starter

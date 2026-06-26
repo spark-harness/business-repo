@@ -142,6 +142,59 @@ class JavaQualityTest(unittest.TestCase):
 
         self.assertIn(f"-Dmaven.repo.local={module.MAVEN_REPO_LOCAL}", command)
 
+    def test_projects_are_loaded_from_yaml_config(self):
+        import importlib.util
+
+        module_name = "java_quality_projects_config_test"
+        spec = importlib.util.spec_from_file_location(module_name, SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        self.assertIsNotNone(spec.loader)
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(module_name, None)
+
+        self.assertEqual(
+            module.PROJECTS["applicant-api"].dependencies,
+            ("spring-starter",),
+        )
+        self.assertEqual(
+            module.PROJECTS["money"].pom,
+            "packages/java/money/pom.xml",
+        )
+
+    def test_projects_config_rejects_unknown_dependency(self):
+        import importlib.util
+
+        module_name = "java_quality_unknown_dependency_test"
+        spec = importlib.util.spec_from_file_location(module_name, SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        self.assertIsNotNone(spec.loader)
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+            with tempfile.TemporaryDirectory() as directory:
+                config_path = Path(directory) / "projects.yaml"
+                config_path.write_text(
+                    "\n".join(
+                        [
+                            "projects:",
+                            "  - name: app",
+                            "    path: apps/app",
+                            "    pom: apps/app/pom.xml",
+                            "    dependencies: missing-lib",
+                            "",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(ValueError, "unknown project missing-lib"):
+                    module.load_projects(config_path)
+        finally:
+            sys.modules.pop(module_name, None)
+
 
 if __name__ == "__main__":
     unittest.main()
