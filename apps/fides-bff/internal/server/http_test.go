@@ -139,6 +139,7 @@ func TestHTTPServer_CORSPreflight_doesNotRequireIdempotencyKey(t *testing.T) {
 		&conf.Server{CORS: conf.CORS{AllowedOrigins: []string{"http://localhost:3001"}}},
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
 	)
@@ -162,7 +163,75 @@ func TestHTTPServer_CORSPreflight_doesNotRequireIdempotencyKey(t *testing.T) {
 func newTestHTTPServer(health *service.HealthService) *khttp.Server {
 	authClient := &fakeApplicantAuthClient{}
 	auth := service.NewAuthService(biz.NewAuthUsecase(authClient))
-	return NewHTTPServer(&conf.Server{}, health, auth, bffkit.NewMemoryIdempotencyStore(0), log.DefaultLogger)
+	return NewHTTPServer(
+		&conf.Server{},
+		health,
+		auth,
+		fakeTokenValidator{applicantID: "applicant_001"},
+		bffkit.NewMemoryIdempotencyStore(0),
+		log.DefaultLogger,
+	)
+}
+
+func TestHTTPServer_ProtectedProbe_requiresBearerToken(t *testing.T) {
+	srv := newTestHTTPServer(service.NewHealthService(biz.NewHealthUsecase("test")))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/protected/session:probe", nil)
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusUnauthorized, rec.Body.String())
+	}
+}
+
+func TestHTTPServer_ProtectedProbe_validTokenReturnsPrincipal(t *testing.T) {
+	srv := newTestHTTPServer(service.NewHealthService(biz.NewHealthUsecase("test")))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/protected/session:probe", nil)
+	req.Header.Set("Authorization", "Bearer valid")
+	req.Header.Set(bffkit.HeaderApplicantID, "attacker")
+	req.Header.Set(bffkit.HeaderIdempotencyKey, "idem-probe")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var body struct {
+		ApplicantID string `json:"applicantId"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.ApplicantID != "applicant_001" {
+		t.Fatalf("applicantId = %q, want applicant_001", body.ApplicantID)
+	}
+}
+
+func TestHTTPServer_ProtectedPathMatcher_coversPricingAndLoanApplications(t *testing.T) {
+	for _, path := range []string{
+		"/api/v1/pricing/quotes",
+		"/api/v1/loan-applications",
+		"/api/v1/loan-applications/draft-1",
+		"/api/v1/protected/session:probe",
+	} {
+		if !isProtectedPath(path) {
+			t.Fatalf("isProtectedPath(%q) = false, want true", path)
+		}
+	}
+	for _, path := range []string{
+		"/api/v1/auth/otp:send",
+		"/api/v1/auth/otp:verify",
+		"/api/v1/auth/token:refresh",
+		"/api/v1/health",
+	} {
+		if isProtectedPath(path) {
+			t.Fatalf("isProtectedPath(%q) = true, want false", path)
+		}
+	}
 }
 
 func TestHTTPServer_AuthSendOtp_mapsRequestAndResponse(t *testing.T) {
@@ -177,6 +246,7 @@ func TestHTTPServer_AuthSendOtp_mapsRequestAndResponse(t *testing.T) {
 		&conf.Server{},
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
 	)
@@ -215,6 +285,7 @@ func TestHTTPServer_AuthVerifyOtp_mapsExpiredError(t *testing.T) {
 		&conf.Server{},
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
 	)
@@ -246,6 +317,7 @@ func TestHTTPServer_AuthSendOtp_mapsCooldownRetryAfter(t *testing.T) {
 		&conf.Server{},
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
 	)
@@ -284,6 +356,7 @@ func TestHTTPServer_AuthSendOtp_mapsConsulNoHealthyInstance(t *testing.T) {
 		&conf.Server{},
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
 	)
@@ -333,6 +406,14 @@ type fakeApplicantAuthClient struct {
 	sendResult  biz.SendOtpResult
 	sendErr     error
 	verifyErr   error
+}
+
+type fakeTokenValidator struct {
+	applicantID string
+}
+
+func (v fakeTokenValidator) ValidateAccessToken(context.Context, string) (bffkit.Principal, error) {
+	return bffkit.Principal{ApplicantID: v.applicantID, TokenID: "token-1", ExpiresAt: time.Now().Add(time.Hour)}, nil
 }
 
 func (f *fakeApplicantAuthClient) SendOtp(_ context.Context, command biz.SendOtpCommand) (biz.SendOtpResult, error) {

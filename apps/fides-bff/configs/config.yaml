@@ -16,6 +16,10 @@ applicant:
   grpc:
     timeout: 3s
     plaintext: true
+auth:
+  token_mode: hmac
+  token_secret: local-dev-token-secret
+  access_token_ttl: 1h
 registry:
   consul:
     enabled: true
