@@ -152,7 +152,7 @@ func originationHTTPError(err error) error {
 	if !errors.As(err, &originationErr) {
 		return err
 	}
-	status := nethttp.StatusBadGateway
+	var status int
 	switch originationErr.Code {
 	case biz.OriginationCodeIdempotencyKeyRequired:
 		status = nethttp.StatusBadRequest
