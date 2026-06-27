@@ -19,6 +19,7 @@ func NewHTTPServer(
 	c *conf.Server,
 	health *service.HealthService,
 	auth *service.AuthService,
+	pricing *service.PricingService,
 	tokenValidator bffkit.TokenValidator,
 	store bffkit.IdempotencyStore,
 	logger log.Logger,
@@ -42,6 +43,7 @@ func NewHTTPServer(
 
 	v1 := srv.Route("/api/v1")
 	v1.GET("/health", health.Health)
+	v1.POST("/pricing/quotes", pricing.CreateQuote)
 	srv.Handle("/api/v1/protected/session:probe", nethttp.HandlerFunc(protectedSessionProbe))
 	fidesbffv1pb.RegisterFidesBffAuthServiceHTTPServer(srv, auth)
 	return srv
