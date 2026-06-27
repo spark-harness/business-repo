@@ -68,7 +68,7 @@ func main() {
 	}
 	defer func() { _ = otelShutdown(context.Background()) }()
 
-	app, cleanup, err := wireApp(&bc.Server, &bc.Applicant, &bc.Registry, biz.Version(Version), logger)
+	app, cleanup, err := wireApp(&bc.Server, &bc.Applicant, &bc.Auth, &bc.Registry, biz.Version(Version), logger)
 	if err != nil {
 		panic(err)
 	}

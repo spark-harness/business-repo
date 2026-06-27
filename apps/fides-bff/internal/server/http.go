@@ -1,6 +1,10 @@
 package server
 
 import (
+	"encoding/json"
+	nethttp "net/http"
+	"strings"
+
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/transport/http"
 	fidesbffv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/fides-bff/v1"
@@ -11,12 +15,20 @@ import (
 )
 
 // NewHTTPServer builds the REST transport and registers the /api/v1 routes.
-func NewHTTPServer(c *conf.Server, health *service.HealthService, auth *service.AuthService, store bffkit.IdempotencyStore, logger log.Logger) *http.Server {
+func NewHTTPServer(
+	c *conf.Server,
+	health *service.HealthService,
+	auth *service.AuthService,
+	tokenValidator bffkit.TokenValidator,
+	store bffkit.IdempotencyStore,
+	logger log.Logger,
+) *http.Server {
 	opts := []http.ServerOption{
 		http.ErrorEncoder(bffkit.ErrorEncoder),
 		http.Filter(
 			bffkit.TraceFilter(log.NewHelper(logger)),
 			bffkit.CORSFilter(bffkit.CORSConfig{AllowedOrigins: c.CORS.AllowedOrigins, MaxAgeSec: 600}),
+			protectedPathAuthFilter(tokenValidator),
 			bffkit.IdempotencyFilter(store),
 		),
 	}
@@ -30,6 +42,41 @@ func NewHTTPServer(c *conf.Server, health *service.HealthService, auth *service.
 
 	v1 := srv.Route("/api/v1")
 	v1.GET("/health", health.Health)
+	srv.Handle("/api/v1/protected/session:probe", nethttp.HandlerFunc(protectedSessionProbe))
 	fidesbffv1pb.RegisterFidesBffAuthServiceHTTPServer(srv, auth)
 	return srv
+}
+
+func protectedPathAuthFilter(tokenValidator bffkit.TokenValidator) http.FilterFunc {
+	return func(next nethttp.Handler) nethttp.Handler {
+		return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+			if isProtectedPath(r.URL.Path) {
+				bffkit.AuthFilter(tokenValidator)(next).ServeHTTP(w, r)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func isProtectedPath(path string) bool {
+	return strings.HasPrefix(path, "/api/v1/protected/") ||
+		strings.HasPrefix(path, "/api/v1/pricing/") ||
+		path == "/api/v1/loan-applications" ||
+		strings.HasPrefix(path, "/api/v1/loan-applications/")
+}
+
+func protectedSessionProbe(w nethttp.ResponseWriter, r *nethttp.Request) {
+	if r.Method != nethttp.MethodPost {
+		w.WriteHeader(nethttp.StatusMethodNotAllowed)
+		return
+	}
+	principal, ok := bffkit.PrincipalFromContext(r.Context())
+	if !ok {
+		bffkit.ErrorEncoder(w, r, bffkit.UnauthorizedError())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(nethttp.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"applicantId": principal.ApplicantID})
 }

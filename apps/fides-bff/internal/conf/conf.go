@@ -9,6 +9,7 @@ package conf
 type Bootstrap struct {
 	Server        Server        `json:"server"`
 	Applicant     Applicant     `json:"applicant"`
+	Auth          Auth          `json:"auth"`
 	Registry      Registry      `json:"registry"`
 	Observability Observability `json:"observability"`
 }
@@ -43,6 +44,12 @@ type Consul struct {
 type GRPC struct {
 	Timeout   string `json:"timeout"`
 	Plaintext bool   `json:"plaintext"`
+}
+
+type Auth struct {
+	TokenMode      string `json:"token_mode"`
+	TokenSecret    string `json:"token_secret"`
+	AccessTokenTTL string `json:"access_token_ttl"`
 }
 
 type Registry struct {

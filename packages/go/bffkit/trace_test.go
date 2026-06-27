@@ -92,6 +92,7 @@ func TestOutgoingGRPCContext_propagatesTraceMetadata(t *testing.T) {
 	}))
 	ctx = ContextWithTraceID(ctx, traceID)
 	ctx = ContextWithCorrelationID(ctx, "corr-def")
+	ctx = ContextWithPrincipal(ctx, Principal{ApplicantID: "applicant_001"})
 
 	md, ok := metadata.FromOutgoingContext(OutgoingGRPCContext(ctx))
 	if !ok {
@@ -105,6 +106,9 @@ func TestOutgoingGRPCContext_propagatesTraceMetadata(t *testing.T) {
 	}
 	if got := md.Get("traceparent"); len(got) != 1 || got[0] != "00-"+traceID+"-"+spanID+"-01" {
 		t.Fatalf("traceparent = %#v, want W3C trace context", got)
+	}
+	if got := md.Get("x-applicant-id"); len(got) != 1 || got[0] != "applicant_001" {
+		t.Fatalf("x-applicant-id = %#v, want applicant_001", got)
 	}
 }
 

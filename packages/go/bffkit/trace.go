@@ -189,6 +189,9 @@ func OutgoingGRPCContext(ctx context.Context) context.Context {
 	if correlationID != "" {
 		kvs = append(kvs, strings.ToLower(HeaderCorrelationID), correlationID)
 	}
+	if principal, ok := PrincipalFromContext(ctx); ok {
+		kvs = append(kvs, strings.ToLower(HeaderApplicantID), principal.ApplicantID)
+	}
 	if traceparent := carrier.Get("traceparent"); traceparent != "" {
 		kvs = append(kvs, "traceparent", traceparent)
 	}
