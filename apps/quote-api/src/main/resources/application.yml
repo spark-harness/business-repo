@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: quote-api
+  config:
+    import:
+      - "optional:file:.env[.properties]"
+
+management:
+  health:
+    db:
+      enabled: true
+
+otel:
+  service:
+    name: quote-api
+  propagators: tracecontext,baggage
+  traces:
+    exporter: ${OTEL_TRACES_EXPORTER:none}
+  metrics:
+    exporter: none
+  logs:
+    exporter: none
+
+spark:
+  quote:
+    validity: 30m
+    jdbc-url: ${QUOTE_JDBC_URL:jdbc:h2:mem:quote;MODE=PostgreSQL;DB_CLOSE_DELAY=-1}
+    jdbc-username: ${QUOTE_JDBC_USERNAME:sa}
+    jdbc-password: ${QUOTE_JDBC_PASSWORD:}
