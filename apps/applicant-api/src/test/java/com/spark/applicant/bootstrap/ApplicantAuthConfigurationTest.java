@@ -116,6 +116,7 @@ class ApplicantAuthConfigurationTest {
         MockEnvironment environment = new MockEnvironment();
         environment.setActiveProfiles("prod");
         environment.setProperty("spring.data.redis.host", "localhost");
+        environment.setProperty("spring.data.redis.password", "test-redis-secret");
         return environment;
     }
 }

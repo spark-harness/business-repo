@@ -1,3 +1,25 @@
+spring:
+  application:
+    name: applicant-api
+  config:
+    import:
+      - "optional:consul:"
+      - "optional:file:.env[.properties]"
+  cloud:
+    consul:
+      config:
+        enabled: false
+        format: yaml
+        watch:
+          enabled: false
+        name: applicant-api
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: forest_dev_password
+      timeout: 2s
+
 management:
   health:
     redis:
@@ -28,29 +50,21 @@ spark:
       runtime-store: redis-jdbc
       otp-provider: test
       token-mode: hmac
-      jdbc-url: ${APPLICANT_DB_URL:jdbc:postgresql://localhost:5432/app}
-      jdbc-username: ${APPLICANT_DB_USERNAME:forest}
-      jdbc-password: ${APPLICANT_DB_PASSWORD:forest_dev_password}
-      token-secret: ${APPLICANT_TOKEN_SECRET:local-dev-token-secret}
-      migrations-enabled: ${APPLICANT_MIGRATIONS_ENABLED:true}
-      key-prefix: ${APPLICANT_REDIS_KEY_PREFIX:applicant-api}
+      jdbc-url: jdbc:postgresql://localhost:5432/app
+      jdbc-username: forest
+      jdbc-password: forest_dev_password
+      token-secret: local-dev-token-secret
+      migrations-enabled: true
+      key-prefix: applicant-api
       consul:
-        enabled: ${APPLICANT_CONSUL_ENABLED:true}
-        url: ${APPLICANT_CONSUL_URL:http://localhost:8500}
+        enabled: true
+        url: http://localhost:8500
         service-name: applicant-api
-        service-address: ${APPLICANT_SERVICE_ADDRESS:127.0.0.1}
-        http-port: ${SERVER_PORT:8080}
-        grpc-port: ${APPLICANT_GRPC_PORT:9090}
-        health-check-url: ${APPLICANT_CONSUL_HEALTH_CHECK_URL:}
+        service-address: 127.0.0.1
+        http-port: 8080
+        grpc-port: 9090
+        health-check-url: ""
         health-check-path: /ready
   grpc:
     server:
-      port: ${APPLICANT_GRPC_PORT:9090}
-
-spring:
-  data:
-    redis:
-      host: ${APPLICANT_REDIS_HOST:localhost}
-      port: ${APPLICANT_REDIS_PORT:6379}
-      password: ${APPLICANT_REDIS_PASSWORD:forest_dev_password}
-      timeout: 2s
+      port: 9090

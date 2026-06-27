@@ -98,6 +98,9 @@ public class ApplicantAuthConfiguration {
         if (environment.getProperty("spring.data.redis.host", "").isBlank()) {
             throw new IllegalStateException("redis host is required in prod profile");
         }
+        if (environment.getProperty("spring.data.redis.password", "").isBlank()) {
+            throw new IllegalStateException("redis password is required in prod profile");
+        }
         if (properties.getTokenMode() != ApplicantAuthProperties.TokenMode.HMAC) {
             throw new IllegalStateException("hmac token mode is required in prod profile");
         }
