@@ -27,3 +27,11 @@ spark:
     jdbc-url: ${QUOTE_JDBC_URL:jdbc:h2:mem:quote;MODE=PostgreSQL;DB_CLOSE_DELAY=-1}
     jdbc-username: ${QUOTE_JDBC_USERNAME:sa}
     jdbc-password: ${QUOTE_JDBC_PASSWORD:}
+    consul:
+      enabled: ${SPARK_QUOTE_CONSUL_ENABLED:false}
+      url: ${SPARK_QUOTE_CONSUL_URL:http://localhost:8500}
+      service-name: ${SPARK_QUOTE_CONSUL_SERVICE_NAME:quote-api}
+      service-address: ${SPARK_QUOTE_CONSUL_SERVICE_ADDRESS:127.0.0.1}
+      http-port: ${SPARK_QUOTE_CONSUL_HTTP_PORT:8080}
+      health-check-url: ${SPARK_QUOTE_CONSUL_HEALTH_CHECK_URL:}
+      health-check-path: ${SPARK_QUOTE_CONSUL_HEALTH_CHECK_PATH:/ready}
