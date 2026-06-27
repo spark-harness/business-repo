@@ -16,4 +16,12 @@
     <Class name="com.spark.applicant.infrastructure.auth.JdbcApplicantRepository"/>
     <Bug pattern="EI_EXPOSE_REP2"/>
   </Match>
+  <Match>
+    <Class name="com.spark.quote.infrastructure.JdbcQuoteRepository"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="com.spark.quote.infrastructure.JdbcRuntimeDependencyProbe"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
 </FindBugsFilter>
