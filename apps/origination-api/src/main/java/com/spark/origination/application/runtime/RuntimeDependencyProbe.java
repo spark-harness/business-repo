@@ -1,5 +1,15 @@
 package com.spark.origination.application.runtime;
 
 public interface RuntimeDependencyProbe {
-    void checkReady();
+    Status check();
+
+    record Status(String name, boolean up) {
+        public static Status up(String name) {
+            return new Status(name, true);
+        }
+
+        public static Status down(String name) {
+            return new Status(name, false);
+        }
+    }
 }

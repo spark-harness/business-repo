@@ -13,7 +13,12 @@ public class JdbcRuntimeDependencyProbe implements RuntimeDependencyProbe {
     }
 
     @Override
-    public void checkReady() {
-        jdbcTemplate.queryForObject("select 1", Integer.class);
+    public Status check() {
+        try {
+            jdbcTemplate.queryForObject("select 1", Integer.class);
+            return Status.up("postgresql");
+        } catch (RuntimeException error) {
+            return Status.down("postgresql");
+        }
     }
 }

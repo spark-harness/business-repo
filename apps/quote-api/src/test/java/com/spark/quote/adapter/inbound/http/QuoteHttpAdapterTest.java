@@ -59,6 +59,37 @@ class QuoteHttpAdapterTest {
     }
 
     @Test
+    void getInternalQuote_withApplicantHeader_returnsPersistedQuote() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("x-applicant-id", "applicant_001");
+        Map<String, Object> request = Map.of(
+                "productCode", "PIL",
+                "amount", "100000.00",
+                "term", 12,
+                "purpose", "debt_consolidation");
+        ResponseEntity<Map> created = restTemplate.exchange(
+                url("/api/v1/pricing/quotes"),
+                HttpMethod.POST,
+                new HttpEntity<>(request, headers),
+                Map.class);
+        String quoteId = (String) created.getBody().get("quoteId");
+
+        ResponseEntity<Map> response = restTemplate.exchange(
+                url("/internal/v1/pricing/quotes/" + quoteId),
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .containsEntry("quoteId", quoteId)
+                .containsEntry("productCode", "PIL")
+                .containsEntry("amount", "100000.00")
+                .containsEntry("term", 12)
+                .containsEntry("purpose", "debt_consolidation");
+    }
+
+    @Test
     void createQuote_withoutApplicantHeader_returnsUnauthorized() {
         Map<String, Object> request = Map.of(
                 "productCode", "PIL",

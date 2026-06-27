@@ -28,3 +28,11 @@ spark:
     jdbc-password: ${ORIGINATION_JDBC_PASSWORD:}
     quote-api-base-url: ${ORIGINATION_QUOTE_API_BASE_URL:http://localhost:8080}
     quote-api-timeout: ${ORIGINATION_QUOTE_API_TIMEOUT:3s}
+    consul:
+      enabled: ${SPARK_ORIGINATION_CONSUL_ENABLED:false}
+      url: ${SPARK_ORIGINATION_CONSUL_URL:http://localhost:8500}
+      service-name: ${SPARK_ORIGINATION_CONSUL_SERVICE_NAME:origination-api}
+      service-address: ${SPARK_ORIGINATION_CONSUL_SERVICE_ADDRESS:127.0.0.1}
+      http-port: ${SPARK_ORIGINATION_CONSUL_HTTP_PORT:8080}
+      health-check-url: ${SPARK_ORIGINATION_CONSUL_HEALTH_CHECK_URL:}
+      health-check-path: ${SPARK_ORIGINATION_CONSUL_HEALTH_CHECK_PATH:/ready}
