@@ -24,6 +24,14 @@ quote:
   http:
     base_url: ""
     timeout: 3s
+origination:
+  consul:
+    address: 127.0.0.1:8500
+    scheme: http
+    service_name: origination-api
+  http:
+    base_url: ""
+    timeout: 3s
 auth:
   token_mode: hmac
   token_secret: local-dev-token-secret

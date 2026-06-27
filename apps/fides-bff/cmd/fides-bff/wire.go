@@ -26,20 +26,24 @@ import (
 // (biz/service/server) stay free of the wire DI framework, per the team
 // backend clean-architecture rule that domain/application must not depend on
 // DI frameworks.
-func wireApp(*conf.Server, *conf.Applicant, *conf.Quote, *conf.Auth, *conf.Registry, biz.Version, log.Logger) (*kratos.App, func(), error) {
+func wireApp(*conf.Server, *conf.Applicant, *conf.Quote, *conf.Origination, *conf.Auth, *conf.Registry, biz.Version, log.Logger) (*kratos.App, func(), error) {
 	panic(wire.Build(
 		biz.NewHealthUsecase,
 		biz.NewAuthUsecase,
 		biz.NewPricingUsecase,
+		biz.NewOriginationUsecase,
 		data.NewApplicantAuthClient,
 		data.NewQuoteClient,
+		data.NewOriginationClient,
 		data.NewSessionTokenValidator,
 		wire.Bind(new(biz.ApplicantAuthClient), new(*data.ApplicantAuthClient)),
 		wire.Bind(new(biz.QuoteClient), new(*data.QuoteClient)),
+		wire.Bind(new(biz.OriginationClient), new(*data.OriginationClient)),
 		wire.Bind(new(bffkit.TokenValidator), new(*data.SessionTokenValidator)),
 		service.NewHealthService,
 		service.NewAuthService,
 		service.NewPricingService,
+		service.NewOriginationService,
 		newIdempotencyStore,
 		newConsulRegistration,
 		server.NewHTTPServer,

@@ -58,10 +58,13 @@ SERVER_HTTP_ADDR=127.0.0.1:9000
 APPLICANT_GRPC_TIMEOUT=10s
 QUOTE_HTTP_BASE_URL=http://quote-api.local:8080
 QUOTE_HTTP_TIMEOUT=5s
+ORIGINATION_HTTP_BASE_URL=http://origination-api.local:8080
+ORIGINATION_HTTP_TIMEOUT=6s
 `)
 	t.Setenv("SERVER_HTTP_ADDR", "127.0.0.1:7000")
 	cleanupEnv(t, "APPLICANT_GRPC_TIMEOUT")
 	cleanupEnv(t, "QUOTE_HTTP_BASE_URL", "QUOTE_HTTP_TIMEOUT")
+	cleanupEnv(t, "ORIGINATION_HTTP_BASE_URL", "ORIGINATION_HTTP_TIMEOUT")
 
 	got, err := loadBootstrap(loadConfigOptions{ConfigPath: configPath, EnvFilePath: envPath})
 	if err != nil {
@@ -75,6 +78,9 @@ QUOTE_HTTP_TIMEOUT=5s
 	}
 	if got.Quote.HTTP.BaseURL != "http://quote-api.local:8080" || got.Quote.HTTP.Timeout != "5s" {
 		t.Fatalf("Quote.HTTP = %#v", got.Quote.HTTP)
+	}
+	if got.Origination.HTTP.BaseURL != "http://origination-api.local:8080" || got.Origination.HTTP.Timeout != "6s" {
+		t.Fatalf("Origination.HTTP = %#v", got.Origination.HTTP)
 	}
 }
 
@@ -208,6 +214,14 @@ quote:
     address: 127.0.0.1:8500
     scheme: http
     service_name: quote-api
+  http:
+    base_url: ""
+    timeout: 3s
+origination:
+  consul:
+    address: 127.0.0.1:8500
+    scheme: http
+    service_name: origination-api
   http:
     base_url: ""
     timeout: 3s
