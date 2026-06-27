@@ -1,4 +1,4 @@
-import { MobileVerificationScreen } from "@/presentation/mobile-verification/mobile-verification-screen";
+import { FidesApplication } from "@/api/fides-application";
 import { ObservabilityBootstrap } from "@/api/observability-bootstrap";
 import { getPublicRuntimeConfig } from "@/api/runtime-config/get-public-runtime-config";
 
@@ -10,7 +10,7 @@ export default async function Home() {
   return (
     <>
       <ObservabilityBootstrap config={runtimeConfig} />
-      <MobileVerificationScreen runtimeConfig={runtimeConfig} />
+      <FidesApplication runtimeConfig={runtimeConfig} />
     </>
   );
 }
