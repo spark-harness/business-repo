@@ -13,3 +13,7 @@ projects:
     path: apps/quote-api
     pom: apps/quote-api/pom.xml
     dependencies: spring-starter
+  - name: origination-api
+    path: apps/origination-api
+    pom: apps/origination-api/pom.xml
+    dependencies: spring-starter
