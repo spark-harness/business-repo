@@ -140,6 +140,7 @@ func TestHTTPServer_CORSPreflight_doesNotRequireIdempotencyKey(t *testing.T) {
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
 		newFakePricingService(),
+		newFakeOriginationService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -170,6 +171,7 @@ func newTestHTTPServer(health *service.HealthService) *khttp.Server {
 		health,
 		auth,
 		pricing,
+		newFakeOriginationService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -357,6 +359,207 @@ func TestHTTPServer_PricingQuote_mapsQuoteUnavailable(t *testing.T) {
 	assertErrorCode(t, rec.Body.Bytes(), biz.PricingCodeQuoteUnavailable)
 }
 
+func TestHTTPServer_LoanApplication_requiresBearerToken(t *testing.T) {
+	originationClient := &fakeOriginationClient{}
+	srv := newTestHTTPServerWithOrigination(originationClient, fakeTokenValidator{applicantID: "applicant_001"})
+
+	req := loanApplicationCreateRequest()
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusUnauthorized, rec.Body.String())
+	}
+	if originationClient.calls != 0 {
+		t.Fatalf("origination-api calls = %d, want 0", originationClient.calls)
+	}
+}
+
+func TestHTTPServer_LoanApplication_rejectsInvalidToken(t *testing.T) {
+	originationClient := &fakeOriginationClient{}
+	srv := newTestHTTPServerWithOrigination(originationClient, fakeTokenValidator{err: bffkit.ErrInvalidAccessToken})
+
+	req := loanApplicationCreateRequest()
+	req.Header.Set("Authorization", "Bearer invalid")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusUnauthorized, rec.Body.String())
+	}
+	if originationClient.calls != 0 {
+		t.Fatalf("origination-api calls = %d, want 0", originationClient.calls)
+	}
+}
+
+func TestHTTPServer_LoanApplicationCreate_callsOriginationWithPrincipalTraceAndIdempotency(t *testing.T) {
+	originationClient := &fakeOriginationClient{
+		summary: biz.LoanApplicationSummary{
+			ApplicationID: "app_123",
+			Status:        "draft",
+			CurrentStep:   "loan_request",
+		},
+	}
+	srv := newTestHTTPServerWithOrigination(originationClient, fakeTokenValidator{applicantID: "applicant_001"})
+
+	req := loanApplicationCreateRequest()
+	req.Header.Set("Authorization", "Bearer valid")
+	req.Header.Set(bffkit.HeaderApplicantID, "attacker")
+	req.Header.Set(bffkit.HeaderTraceParent, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	req.Header.Set(bffkit.HeaderTraceState, "vendor=state")
+	req.Header.Set(bffkit.HeaderIdempotencyKey, "idem-create")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if originationClient.calls != 1 {
+		t.Fatalf("origination-api calls = %d, want 1", originationClient.calls)
+	}
+	if originationClient.createCommand.ApplicantID != "applicant_001" {
+		t.Fatalf("applicantId = %q, want applicant_001", originationClient.createCommand.ApplicantID)
+	}
+	if originationClient.createCommand.IdempotencyKey != "idem-create" {
+		t.Fatalf("idempotency key = %q, want idem-create", originationClient.createCommand.IdempotencyKey)
+	}
+	if originationClient.createCommand.TraceParent == "" {
+		t.Fatal("traceparent was not propagated")
+	}
+	if originationClient.createCommand.TraceState != "vendor=state" {
+		t.Fatalf("tracestate = %q, want vendor=state", originationClient.createCommand.TraceState)
+	}
+	var body struct {
+		ApplicationID string `json:"applicationId"`
+		Status        string `json:"status"`
+		CurrentStep   string `json:"currentStep"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.ApplicationID != "app_123" || body.Status != "draft" || body.CurrentStep != "loan_request" {
+		t.Fatalf("body = %#v", body)
+	}
+}
+
+func TestHTTPServer_LoanApplicationGet_returnsDetail(t *testing.T) {
+	originationClient := &fakeOriginationClient{
+		detail: biz.LoanApplicationDetail{
+			ApplicationID: "app_123",
+			Loan:          biz.LoanTerms{Amount: "100000.00", Term: 12, Purpose: "debt_consolidation"},
+			AcceptedQuote: biz.AcceptedQuote{
+				QuoteID:       "quote_123",
+				Monthly:       "8560.75",
+				APR:           "0.0520",
+				TotalInterest: "2729.00",
+				TotalPayable:  "102729.00",
+				ValidUntil:    "2026-06-28T03:00:00Z",
+			},
+			Status:      "draft",
+			CurrentStep: "loan_request",
+		},
+	}
+	srv := newTestHTTPServerWithOrigination(originationClient, fakeTokenValidator{applicantID: "applicant_001"})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/loan-applications/app_123", nil)
+	req.Header.Set("Authorization", "Bearer valid")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if originationClient.getCommand.ApplicationID != "app_123" {
+		t.Fatalf("applicationId = %q, want app_123", originationClient.getCommand.ApplicationID)
+	}
+	var body struct {
+		ApplicationID string `json:"applicationId"`
+		Loan          struct {
+			Amount  string `json:"amount"`
+			Term    int    `json:"term"`
+			Purpose string `json:"purpose"`
+		} `json:"loan"`
+		AcceptedQuote struct {
+			QuoteID string `json:"quoteId"`
+			Monthly string `json:"monthly"`
+		} `json:"acceptedQuote"`
+		Status      string `json:"status"`
+		CurrentStep string `json:"currentStep"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.ApplicationID != "app_123" || body.Loan.Amount != "100000.00" || body.AcceptedQuote.QuoteID != "quote_123" || body.CurrentStep != "loan_request" {
+		t.Fatalf("body = %#v", body)
+	}
+}
+
+func TestHTTPServer_LoanApplicationPatch_propagatesIdempotency(t *testing.T) {
+	originationClient := &fakeOriginationClient{
+		summary: biz.LoanApplicationSummary{
+			ApplicationID: "app_123",
+			Status:        "draft",
+			CurrentStep:   "loan_request",
+		},
+	}
+	srv := newTestHTTPServerWithOrigination(originationClient, fakeTokenValidator{applicantID: "applicant_001"})
+
+	req := loanApplicationPatchRequest("app_123")
+	req.Header.Set("Authorization", "Bearer valid")
+	req.Header.Set(bffkit.HeaderIdempotencyKey, "idem-patch")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if originationClient.patchCommand.ApplicationID != "app_123" {
+		t.Fatalf("applicationId = %q, want app_123", originationClient.patchCommand.ApplicationID)
+	}
+	if originationClient.patchCommand.IdempotencyKey != "idem-patch" {
+		t.Fatalf("idempotency key = %q, want idem-patch", originationClient.patchCommand.IdempotencyKey)
+	}
+}
+
+func TestHTTPServer_LoanApplication_mapsOriginationErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		code       string
+		wantStatus int
+	}{
+		{"idempotency required", biz.OriginationCodeIdempotencyKeyRequired, http.StatusBadRequest},
+		{"forbidden", biz.OriginationCodeForbidden, http.StatusForbidden},
+		{"not found", biz.OriginationCodeNotFound, http.StatusNotFound},
+		{"quote expired", biz.OriginationCodeQuoteExpired, http.StatusGone},
+		{"amount out of range", biz.OriginationCodeAmountOutOfRange, http.StatusUnprocessableEntity},
+		{"validation", biz.OriginationCodeValidation, http.StatusUnprocessableEntity},
+		{"unavailable", biz.OriginationCodeUnavailable, http.StatusBadGateway},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originationClient := &fakeOriginationClient{err: &biz.OriginationError{Code: tt.code, Message: tt.code}}
+			srv := newTestHTTPServerWithOrigination(originationClient, fakeTokenValidator{applicantID: "applicant_001"})
+
+			req := loanApplicationCreateRequest()
+			req.Header.Set("Authorization", "Bearer valid")
+			req.Header.Set(bffkit.HeaderIdempotencyKey, "idem-error")
+			rec := httptest.NewRecorder()
+
+			srv.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			assertErrorCode(t, rec.Body.Bytes(), tt.code)
+		})
+	}
+}
+
 func TestHTTPServer_AuthSendOtp_mapsRequestAndResponse(t *testing.T) {
 	authClient := &fakeApplicantAuthClient{
 		sendResult: biz.SendOtpResult{
@@ -370,6 +573,7 @@ func TestHTTPServer_AuthSendOtp_mapsRequestAndResponse(t *testing.T) {
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
 		newFakePricingService(),
+		newFakeOriginationService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -410,6 +614,7 @@ func TestHTTPServer_AuthVerifyOtp_mapsExpiredError(t *testing.T) {
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
 		newFakePricingService(),
+		newFakeOriginationService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -443,6 +648,7 @@ func TestHTTPServer_AuthSendOtp_mapsCooldownRetryAfter(t *testing.T) {
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
 		newFakePricingService(),
+		newFakeOriginationService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -483,6 +689,7 @@ func TestHTTPServer_AuthSendOtp_mapsConsulNoHealthyInstance(t *testing.T) {
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
 		newFakePricingService(),
+		newFakeOriginationService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -569,15 +776,38 @@ func newFakePricingService() *service.PricingService {
 	return service.NewPricingService(biz.NewPricingUsecase(&fakeQuoteClient{}))
 }
 
+func newFakeOriginationService() *service.OriginationService {
+	return service.NewOriginationService(biz.NewOriginationUsecase(&fakeOriginationClient{}))
+}
+
 func newTestHTTPServerWithPricing(quoteClient biz.QuoteClient, tokenValidator bffkit.TokenValidator) *khttp.Server {
 	authClient := &fakeApplicantAuthClient{}
 	auth := service.NewAuthService(biz.NewAuthUsecase(authClient))
 	pricing := service.NewPricingService(biz.NewPricingUsecase(quoteClient))
+	origination := newFakeOriginationService()
 	return NewHTTPServer(
 		&conf.Server{},
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		auth,
 		pricing,
+		origination,
+		tokenValidator,
+		bffkit.NewMemoryIdempotencyStore(0),
+		log.DefaultLogger,
+	)
+}
+
+func newTestHTTPServerWithOrigination(originationClient biz.OriginationClient, tokenValidator bffkit.TokenValidator) *khttp.Server {
+	authClient := &fakeApplicantAuthClient{}
+	auth := service.NewAuthService(biz.NewAuthUsecase(authClient))
+	pricing := newFakePricingService()
+	origination := service.NewOriginationService(biz.NewOriginationUsecase(originationClient))
+	return NewHTTPServer(
+		&conf.Server{},
+		service.NewHealthService(biz.NewHealthUsecase("test")),
+		auth,
+		pricing,
+		origination,
 		tokenValidator,
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -588,6 +818,18 @@ func pricingQuoteRequest() *http.Request {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/pricing/quotes", strings.NewReader(`{"productCode":"PIL","amount":"100000.00","term":12,"purpose":"debt_consolidation"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(bffkit.HeaderIdempotencyKey, "idem-pricing-"+time.Now().Format("150405.000000000"))
+	return req
+}
+
+func loanApplicationCreateRequest() *http.Request {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/loan-applications", strings.NewReader(`{"productCode":"PIL","loan":{"amount":"100000.00","term":12,"purpose":"debt_consolidation"},"quoteId":"quote_123"}`))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
+func loanApplicationPatchRequest(applicationID string) *http.Request {
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/loan-applications/"+applicationID, strings.NewReader(`{"loan":{"amount":"120000.00","term":24,"purpose":"debt_consolidation"},"quoteId":"quote_456"}`))
+	req.Header.Set("Content-Type", "application/json")
 	return req
 }
 
@@ -613,4 +855,32 @@ func (f *fakeQuoteClient) CreateQuote(_ context.Context, command biz.CreateQuote
 	f.calls++
 	f.command = command
 	return f.result, f.err
+}
+
+type fakeOriginationClient struct {
+	calls         int
+	createCommand biz.CreateLoanApplicationCommand
+	getCommand    biz.GetLoanApplicationCommand
+	patchCommand  biz.PatchLoanApplicationCommand
+	summary       biz.LoanApplicationSummary
+	detail        biz.LoanApplicationDetail
+	err           error
+}
+
+func (f *fakeOriginationClient) CreateLoanApplication(_ context.Context, command biz.CreateLoanApplicationCommand) (biz.LoanApplicationSummary, error) {
+	f.calls++
+	f.createCommand = command
+	return f.summary, f.err
+}
+
+func (f *fakeOriginationClient) GetLoanApplication(_ context.Context, command biz.GetLoanApplicationCommand) (biz.LoanApplicationDetail, error) {
+	f.calls++
+	f.getCommand = command
+	return f.detail, f.err
+}
+
+func (f *fakeOriginationClient) PatchLoanApplication(_ context.Context, command biz.PatchLoanApplicationCommand) (biz.LoanApplicationSummary, error) {
+	f.calls++
+	f.patchCommand = command
+	return f.summary, f.err
 }

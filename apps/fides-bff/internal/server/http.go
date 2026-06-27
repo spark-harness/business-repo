@@ -20,6 +20,7 @@ func NewHTTPServer(
 	health *service.HealthService,
 	auth *service.AuthService,
 	pricing *service.PricingService,
+	origination *service.OriginationService,
 	tokenValidator bffkit.TokenValidator,
 	store bffkit.IdempotencyStore,
 	logger log.Logger,
@@ -44,6 +45,9 @@ func NewHTTPServer(
 	v1 := srv.Route("/api/v1")
 	v1.GET("/health", health.Health)
 	v1.POST("/pricing/quotes", pricing.CreateQuote)
+	v1.POST("/loan-applications", origination.CreateLoanApplication)
+	v1.GET("/loan-applications/{applicationId}", origination.GetLoanApplication)
+	v1.PATCH("/loan-applications/{applicationId}", origination.PatchLoanApplication)
 	srv.Handle("/api/v1/protected/session:probe", nethttp.HandlerFunc(protectedSessionProbe))
 	fidesbffv1pb.RegisterFidesBffAuthServiceHTTPServer(srv, auth)
 	return srv

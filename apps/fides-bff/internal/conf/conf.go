@@ -10,6 +10,7 @@ type Bootstrap struct {
 	Server        Server        `json:"server"`
 	Applicant     Applicant     `json:"applicant"`
 	Quote         Quote         `json:"quote"`
+	Origination   Origination   `json:"origination"`
 	Auth          Auth          `json:"auth"`
 	Registry      Registry      `json:"registry"`
 	Observability Observability `json:"observability"`
@@ -41,6 +42,11 @@ type Quote struct {
 	HTTP   QuoteHTTP `json:"http"`
 }
 
+type Origination struct {
+	Consul Consul          `json:"consul"`
+	HTTP   OriginationHTTP `json:"http"`
+}
+
 type Consul struct {
 	Address     string `json:"address"`
 	Scheme      string `json:"scheme"`
@@ -48,6 +54,11 @@ type Consul struct {
 }
 
 type QuoteHTTP struct {
+	BaseURL string `json:"base_url"`
+	Timeout string `json:"timeout"`
+}
+
+type OriginationHTTP struct {
 	BaseURL string `json:"base_url"`
 	Timeout string `json:"timeout"`
 }
