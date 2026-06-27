@@ -17,12 +17,8 @@ RUN --mount=type=secret,id=github_token \
         sleep 5; \
     done
 COPY apps/fides-web ./
-ARG NEXT_PUBLIC_FIDES_OTP_ADAPTER=real
-ARG NEXT_PUBLIC_FIDES_BFF_BASE_URL=/api/v1
 ENV CI=true
 ENV PNPM_CONFIG_IGNORE_SCRIPTS=true
-ENV NEXT_PUBLIC_FIDES_OTP_ADAPTER=${NEXT_PUBLIC_FIDES_OTP_ADAPTER}
-ENV NEXT_PUBLIC_FIDES_BFF_BASE_URL=${NEXT_PUBLIC_FIDES_BFF_BASE_URL}
 RUN mkdir -p public && pnpm build
 RUN patched_picomatch="$(find node_modules/.pnpm -path '*/node_modules/picomatch/package.json' -print -quit)" \
     && test -n "${patched_picomatch}" \

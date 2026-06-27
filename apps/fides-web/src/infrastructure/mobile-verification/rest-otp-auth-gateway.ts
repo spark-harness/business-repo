@@ -216,9 +216,13 @@ function traceHeaders(idempotencyKey: string, requestContext: Context): Record<s
     return headers;
   }
   const traceId = trace.getSpanContext(requestContext)?.traceId;
-  if (traceId) {
+  if (traceId && traceId !== "00000000000000000000000000000000") {
     headers["X-Trace-Id"] = traceId;
+    return headers;
   }
+  const fallbackTraceId = randomHex(16);
+  headers.traceparent = `00-${fallbackTraceId}-${randomHex(8)}-01`;
+  headers["X-Trace-Id"] = fallbackTraceId;
   return headers;
 }
 
@@ -226,6 +230,12 @@ function baseHeaders(idempotencyKey: string): Record<string, string> {
   return {
     "Idempotency-Key": idempotencyKey,
   };
+}
+
+function randomHex(byteLength: number): string {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 async function normalizeBffError(error: ResponseError): Promise<BffOtpError> {

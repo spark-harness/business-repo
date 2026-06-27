@@ -9,22 +9,22 @@ import { BrowserFlowController } from "@/infrastructure/mobile-verification/brow
 import { BrowserSessionStore } from "@/infrastructure/mobile-verification/browser-session-store";
 import { MockOtpAuthGateway } from "@/infrastructure/mobile-verification/mock-otp-auth-gateway";
 import { RestOtpAuthGateway } from "@/infrastructure/mobile-verification/rest-otp-auth-gateway";
+import type { PublicRuntimeConfig } from "@/api/runtime-config/public-runtime-config";
 
-export function createDefaultMobileVerificationController() {
+export function createDefaultMobileVerificationController(config: PublicRuntimeConfig) {
   return createMobileVerificationController(
-    createOtpGateway(),
+    createOtpGateway(config),
     undefined,
     new BrowserSessionStore(),
     new BrowserFlowController(),
   );
 }
 
-function createOtpGateway(): OtpAuthGateway {
-  const mode = process.env.NEXT_PUBLIC_FIDES_OTP_ADAPTER ?? "mock";
-  if (mode === "real") {
-    return new RestOtpAuthGateway(process.env.NEXT_PUBLIC_FIDES_BFF_BASE_URL ?? "/api/v1");
+function createOtpGateway(config: PublicRuntimeConfig): OtpAuthGateway {
+  if (config.otpAdapter === "real") {
+    return new RestOtpAuthGateway(config.bffBaseUrl);
   }
-  if (mode === "disabled") {
+  if (config.otpAdapter === "disabled") {
     return new DisabledOtpAuthGateway();
   }
   return new MockOtpAuthGateway();

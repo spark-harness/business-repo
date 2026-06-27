@@ -21,7 +21,27 @@ describe("initializeBrowserTracing", () => {
     });
     const { initializeBrowserTracing } = await import("./browser-tracing");
 
-    expect(initializeBrowserTracing()).toBe(false);
-    expect(initializeBrowserTracing()).toBe(true);
+    expect(initializeBrowserTracing({ headers: {} })).toBe(false);
+    expect(initializeBrowserTracing({ headers: {} })).toBe(true);
+  });
+
+  it("uses runtime public config for browser tracing exporter", async () => {
+    vi.resetModules();
+    const exporter = vi.fn();
+    vi.doMock("@opentelemetry/exporter-trace-otlp-http", () => ({
+      OTLPTraceExporter: exporter,
+    }));
+    const { initializeBrowserTracing } = await import("./browser-tracing");
+
+    expect(
+      initializeBrowserTracing({
+        endpoint: "https://otel.example/v1/traces",
+        headers: { "x-lendora-environment": "sta" },
+      }),
+    ).toBe(true);
+    expect(exporter).toHaveBeenCalledWith({
+      url: "https://otel.example/v1/traces",
+      headers: { "x-lendora-environment": "sta" },
+    });
   });
 });
