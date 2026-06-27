@@ -8,9 +8,11 @@ import type {
   MobileVerificationVerifiedResult,
 } from "@/adapters/mobile-verification/mobile-verification-controller";
 import { createDefaultMobileVerificationController } from "@/api/mobile-verification/create-mobile-verification-controller";
+import type { PublicRuntimeConfig } from "@/api/runtime-config/public-runtime-config";
 
 type MobileVerificationScreenProps = {
   controller?: MobileVerificationController;
+  runtimeConfig?: PublicRuntimeConfig;
   onVerified?: (result: MobileVerificationVerifiedResult) => void;
 };
 
@@ -19,12 +21,18 @@ type FormError = {
   message: string;
 };
 
-const defaultController = createDefaultMobileVerificationController();
+const fallbackRuntimeConfig: PublicRuntimeConfig = {
+  otpAdapter: "mock",
+  bffBaseUrl: "/api/v1",
+  browserTracing: { headers: {} },
+};
 
 export function MobileVerificationScreen({
-  controller = defaultController,
+  controller,
+  runtimeConfig = fallbackRuntimeConfig,
   onVerified,
 }: MobileVerificationScreenProps) {
+  const resolvedController = controller ?? createDefaultMobileVerificationController(runtimeConfig);
   const [countryCode, setCountryCode] = useState("+852");
   const [phone, setPhone] = useState("");
   const [otpDigits, setOtpDigits] = useState(["", "", "", "", "", ""]);
@@ -52,7 +60,7 @@ export function MobileVerificationScreen({
     setError(null);
     setIsSending(true);
     try {
-      const result = await controller.sendOtp({ countryCode, phone });
+      const result = await resolvedController.sendOtp({ countryCode, phone });
       if (!result.ok) {
         setError(result.error);
         if (result.error.retryAfterSec) {
@@ -78,7 +86,7 @@ export function MobileVerificationScreen({
 
     setIsVerifying(true);
     try {
-      const result = await controller.verifyOtp({
+      const result = await resolvedController.verifyOtp({
         challengeId: challenge.challengeId,
         code: otpCode,
       });

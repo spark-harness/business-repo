@@ -1,22 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("createDefaultMobileVerificationController", () => {
-  const originalMode = process.env.NEXT_PUBLIC_FIDES_OTP_ADAPTER;
-  const originalBaseUrl = process.env.NEXT_PUBLIC_FIDES_BFF_BASE_URL;
-
   afterEach(() => {
-    process.env.NEXT_PUBLIC_FIDES_OTP_ADAPTER = originalMode;
-    process.env.NEXT_PUBLIC_FIDES_BFF_BASE_URL = originalBaseUrl;
     vi.resetModules();
   });
 
-  it("uses the mock gateway by default", async () => {
-    delete process.env.NEXT_PUBLIC_FIDES_OTP_ADAPTER;
+  it("uses the mock gateway from public runtime config by default", async () => {
     vi.resetModules();
     const { createDefaultMobileVerificationController } = await import(
       "./create-mobile-verification-controller"
     );
-    const controller = createDefaultMobileVerificationController();
+    const controller = createDefaultMobileVerificationController({
+      otpAdapter: "mock",
+      bffBaseUrl: "/api/v1",
+      browserTracing: { headers: {} },
+    });
 
     await expect(
       controller.sendOtp({ countryCode: "+852", phone: "91234567" }),
@@ -26,13 +24,16 @@ describe("createDefaultMobileVerificationController", () => {
     });
   });
 
-  it("can disable OTP through adapter mode config", async () => {
-    process.env.NEXT_PUBLIC_FIDES_OTP_ADAPTER = "disabled";
+  it("can disable OTP through public runtime config", async () => {
     vi.resetModules();
     const { createDefaultMobileVerificationController } = await import(
       "./create-mobile-verification-controller"
     );
-    const controller = createDefaultMobileVerificationController();
+    const controller = createDefaultMobileVerificationController({
+      otpAdapter: "disabled",
+      bffBaseUrl: "/api/v1",
+      browserTracing: { headers: {} },
+    });
 
     await expect(
       controller.sendOtp({ countryCode: "+852", phone: "91234567" }),
