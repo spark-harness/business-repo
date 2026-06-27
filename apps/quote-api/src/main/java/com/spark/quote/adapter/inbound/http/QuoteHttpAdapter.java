@@ -34,7 +34,7 @@ public class QuoteHttpAdapter {
     }
 
     @GetMapping("/internal/v1/pricing/quotes/{quoteId}")
-    public InternalQuoteResponse get(@PathVariable String quoteId) {
+    public InternalQuoteResponse get(@PathVariable("quoteId") String quoteId) {
         return InternalQuoteResponse.from(getQuoteUseCase.get(quoteId));
     }
 

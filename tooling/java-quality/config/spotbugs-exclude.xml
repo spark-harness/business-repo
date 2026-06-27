@@ -41,6 +41,14 @@
     <Bug pattern="EI_EXPOSE_REP2"/>
   </Match>
   <Match>
+    <Class name="com.spark.origination.bootstrap.OriginationProperties"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="com.spark.origination.bootstrap.OriginationProperties"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
     <Class name="com.spark.quote.bootstrap.QuoteProperties"/>
     <Bug pattern="EI_EXPOSE_REP"/>
   </Match>
