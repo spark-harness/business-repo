@@ -139,6 +139,7 @@ func TestHTTPServer_CORSPreflight_doesNotRequireIdempotencyKey(t *testing.T) {
 		&conf.Server{CORS: conf.CORS{AllowedOrigins: []string{"http://localhost:3001"}}},
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		newFakePricingService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -163,10 +164,12 @@ func TestHTTPServer_CORSPreflight_doesNotRequireIdempotencyKey(t *testing.T) {
 func newTestHTTPServer(health *service.HealthService) *khttp.Server {
 	authClient := &fakeApplicantAuthClient{}
 	auth := service.NewAuthService(biz.NewAuthUsecase(authClient))
+	pricing := service.NewPricingService(biz.NewPricingUsecase(&fakeQuoteClient{}))
 	return NewHTTPServer(
 		&conf.Server{},
 		health,
 		auth,
+		pricing,
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -234,6 +237,126 @@ func TestHTTPServer_ProtectedPathMatcher_coversPricingAndLoanApplications(t *tes
 	}
 }
 
+func TestHTTPServer_PricingQuote_requiresBearerToken(t *testing.T) {
+	quoteClient := &fakeQuoteClient{}
+	srv := newTestHTTPServerWithPricing(quoteClient, fakeTokenValidator{applicantID: "applicant_001"})
+
+	req := pricingQuoteRequest()
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusUnauthorized, rec.Body.String())
+	}
+	if quoteClient.calls != 0 {
+		t.Fatalf("quote-api calls = %d, want 0", quoteClient.calls)
+	}
+}
+
+func TestHTTPServer_PricingQuote_rejectsInvalidToken(t *testing.T) {
+	quoteClient := &fakeQuoteClient{}
+	srv := newTestHTTPServerWithPricing(quoteClient, fakeTokenValidator{err: bffkit.ErrInvalidAccessToken})
+
+	req := pricingQuoteRequest()
+	req.Header.Set("Authorization", "Bearer invalid")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusUnauthorized, rec.Body.String())
+	}
+	if quoteClient.calls != 0 {
+		t.Fatalf("quote-api calls = %d, want 0", quoteClient.calls)
+	}
+}
+
+func TestHTTPServer_PricingQuote_callsQuoteAPIWithPrincipalAndTrace(t *testing.T) {
+	quoteClient := &fakeQuoteClient{
+		result: biz.QuoteResult{
+			QuoteID:       "quote_123",
+			Monthly:       "8560.75",
+			APR:           "0.0520",
+			TotalInterest: "2729.00",
+			TotalPayable:  "102729.00",
+			ValidUntil:    "2026-06-28T03:00:00Z",
+		},
+	}
+	srv := newTestHTTPServerWithPricing(quoteClient, fakeTokenValidator{applicantID: "applicant_001"})
+
+	req := pricingQuoteRequest()
+	req.Header.Set("Authorization", "Bearer valid")
+	req.Header.Set(bffkit.HeaderApplicantID, "attacker")
+	req.Header.Set(bffkit.HeaderTraceParent, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	req.Header.Set(bffkit.HeaderTraceState, "vendor=state")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if quoteClient.calls != 1 {
+		t.Fatalf("quote-api calls = %d, want 1", quoteClient.calls)
+	}
+	if quoteClient.command.ApplicantID != "applicant_001" {
+		t.Fatalf("applicantId = %q, want applicant_001", quoteClient.command.ApplicantID)
+	}
+	if quoteClient.command.TraceParent == "" {
+		t.Fatal("traceparent was not propagated")
+	}
+	if quoteClient.command.TraceState != "vendor=state" {
+		t.Fatalf("tracestate = %q, want vendor=state", quoteClient.command.TraceState)
+	}
+	var body struct {
+		QuoteID       string `json:"quoteId"`
+		Monthly       string `json:"monthly"`
+		APR           string `json:"apr"`
+		TotalInterest string `json:"totalInterest"`
+		TotalPayable  string `json:"totalPayable"`
+		ValidUntil    string `json:"validUntil"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.QuoteID != "quote_123" || body.Monthly != "8560.75" || body.APR != "0.0520" || body.TotalInterest != "2729.00" || body.TotalPayable != "102729.00" || body.ValidUntil == "" {
+		t.Fatalf("body = %#v", body)
+	}
+}
+
+func TestHTTPServer_PricingQuote_mapsAmountOutOfRange(t *testing.T) {
+	quoteClient := &fakeQuoteClient{err: &biz.PricingError{Code: biz.PricingCodeAmountOutOfRange, Message: "amount out of range"}}
+	srv := newTestHTTPServerWithPricing(quoteClient, fakeTokenValidator{applicantID: "applicant_001"})
+
+	req := pricingQuoteRequest()
+	req.Header.Set("Authorization", "Bearer valid")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	}
+	assertErrorCode(t, rec.Body.Bytes(), biz.PricingCodeAmountOutOfRange)
+}
+
+func TestHTTPServer_PricingQuote_mapsQuoteUnavailable(t *testing.T) {
+	quoteClient := &fakeQuoteClient{err: &biz.PricingError{Code: biz.PricingCodeQuoteUnavailable, Message: "quote-api is unavailable"}}
+	srv := newTestHTTPServerWithPricing(quoteClient, fakeTokenValidator{applicantID: "applicant_001"})
+
+	req := pricingQuoteRequest()
+	req.Header.Set("Authorization", "Bearer valid")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusBadGateway, rec.Body.String())
+	}
+	assertErrorCode(t, rec.Body.Bytes(), biz.PricingCodeQuoteUnavailable)
+}
+
 func TestHTTPServer_AuthSendOtp_mapsRequestAndResponse(t *testing.T) {
 	authClient := &fakeApplicantAuthClient{
 		sendResult: biz.SendOtpResult{
@@ -246,6 +369,7 @@ func TestHTTPServer_AuthSendOtp_mapsRequestAndResponse(t *testing.T) {
 		&conf.Server{},
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		newFakePricingService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -285,6 +409,7 @@ func TestHTTPServer_AuthVerifyOtp_mapsExpiredError(t *testing.T) {
 		&conf.Server{},
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		newFakePricingService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -317,6 +442,7 @@ func TestHTTPServer_AuthSendOtp_mapsCooldownRetryAfter(t *testing.T) {
 		&conf.Server{},
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		newFakePricingService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -356,6 +482,7 @@ func TestHTTPServer_AuthSendOtp_mapsConsulNoHealthyInstance(t *testing.T) {
 		&conf.Server{},
 		service.NewHealthService(biz.NewHealthUsecase("test")),
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		newFakePricingService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -410,9 +537,13 @@ type fakeApplicantAuthClient struct {
 
 type fakeTokenValidator struct {
 	applicantID string
+	err         error
 }
 
 func (v fakeTokenValidator) ValidateAccessToken(context.Context, string) (bffkit.Principal, error) {
+	if v.err != nil {
+		return bffkit.Principal{}, v.err
+	}
 	return bffkit.Principal{ApplicantID: v.applicantID, TokenID: "token-1", ExpiresAt: time.Now().Add(time.Hour)}, nil
 }
 
@@ -432,4 +563,54 @@ func (f *fakeApplicantAuthClient) RefreshToken(context.Context, biz.RefreshToken
 func testConsulConfig(raw string) conf.Consul {
 	parts := strings.SplitN(raw, "://", 2)
 	return conf.Consul{Scheme: parts[0], Address: parts[1], ServiceName: "applicant-api"}
+}
+
+func newFakePricingService() *service.PricingService {
+	return service.NewPricingService(biz.NewPricingUsecase(&fakeQuoteClient{}))
+}
+
+func newTestHTTPServerWithPricing(quoteClient biz.QuoteClient, tokenValidator bffkit.TokenValidator) *khttp.Server {
+	authClient := &fakeApplicantAuthClient{}
+	auth := service.NewAuthService(biz.NewAuthUsecase(authClient))
+	pricing := service.NewPricingService(biz.NewPricingUsecase(quoteClient))
+	return NewHTTPServer(
+		&conf.Server{},
+		service.NewHealthService(biz.NewHealthUsecase("test")),
+		auth,
+		pricing,
+		tokenValidator,
+		bffkit.NewMemoryIdempotencyStore(0),
+		log.DefaultLogger,
+	)
+}
+
+func pricingQuoteRequest() *http.Request {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/pricing/quotes", strings.NewReader(`{"productCode":"PIL","amount":"100000.00","term":12,"purpose":"debt_consolidation"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(bffkit.HeaderIdempotencyKey, "idem-pricing-"+time.Now().Format("150405.000000000"))
+	return req
+}
+
+func assertErrorCode(t *testing.T, raw []byte, want string) {
+	t.Helper()
+	var body bffkit.ErrorEnvelope
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Error.Code != want {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, want)
+	}
+}
+
+type fakeQuoteClient struct {
+	calls   int
+	command biz.CreateQuoteCommand
+	result  biz.QuoteResult
+	err     error
+}
+
+func (f *fakeQuoteClient) CreateQuote(_ context.Context, command biz.CreateQuoteCommand) (biz.QuoteResult, error) {
+	f.calls++
+	f.command = command
+	return f.result, f.err
 }

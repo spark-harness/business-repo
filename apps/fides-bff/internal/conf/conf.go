@@ -9,6 +9,7 @@ package conf
 type Bootstrap struct {
 	Server        Server        `json:"server"`
 	Applicant     Applicant     `json:"applicant"`
+	Quote         Quote         `json:"quote"`
 	Auth          Auth          `json:"auth"`
 	Registry      Registry      `json:"registry"`
 	Observability Observability `json:"observability"`
@@ -35,10 +36,20 @@ type Applicant struct {
 	GRPC   GRPC   `json:"grpc"`
 }
 
+type Quote struct {
+	Consul Consul    `json:"consul"`
+	HTTP   QuoteHTTP `json:"http"`
+}
+
 type Consul struct {
 	Address     string `json:"address"`
 	Scheme      string `json:"scheme"`
 	ServiceName string `json:"service_name"`
+}
+
+type QuoteHTTP struct {
+	BaseURL string `json:"base_url"`
+	Timeout string `json:"timeout"`
 }
 
 type GRPC struct {

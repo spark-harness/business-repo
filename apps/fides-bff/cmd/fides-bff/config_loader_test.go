@@ -56,9 +56,12 @@ func TestLoadBootstrap_EnvFileDoesNotOverrideExistingEnvironment(t *testing.T) {
 	envPath := writeFile(t, ".env", `
 SERVER_HTTP_ADDR=127.0.0.1:9000
 APPLICANT_GRPC_TIMEOUT=10s
+QUOTE_HTTP_BASE_URL=http://quote-api.local:8080
+QUOTE_HTTP_TIMEOUT=5s
 `)
 	t.Setenv("SERVER_HTTP_ADDR", "127.0.0.1:7000")
 	cleanupEnv(t, "APPLICANT_GRPC_TIMEOUT")
+	cleanupEnv(t, "QUOTE_HTTP_BASE_URL", "QUOTE_HTTP_TIMEOUT")
 
 	got, err := loadBootstrap(loadConfigOptions{ConfigPath: configPath, EnvFilePath: envPath})
 	if err != nil {
@@ -69,6 +72,9 @@ APPLICANT_GRPC_TIMEOUT=10s
 	}
 	if got.Applicant.GRPC.Timeout != "10s" {
 		t.Fatalf("Applicant.GRPC.Timeout = %q", got.Applicant.GRPC.Timeout)
+	}
+	if got.Quote.HTTP.BaseURL != "http://quote-api.local:8080" || got.Quote.HTTP.Timeout != "5s" {
+		t.Fatalf("Quote.HTTP = %#v", got.Quote.HTTP)
 	}
 }
 
@@ -197,6 +203,14 @@ applicant:
   grpc:
     timeout: 3s
     plaintext: true
+quote:
+  consul:
+    address: 127.0.0.1:8500
+    scheme: http
+    service_name: quote-api
+  http:
+    base_url: ""
+    timeout: 3s
 registry:
   consul:
     enabled: false

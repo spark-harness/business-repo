@@ -16,6 +16,14 @@ applicant:
   grpc:
     timeout: 3s
     plaintext: true
+quote:
+  consul:
+    address: 127.0.0.1:8500
+    scheme: http
+    service_name: quote-api
+  http:
+    base_url: ""
+    timeout: 3s
 auth:
   token_mode: hmac
   token_secret: local-dev-token-secret
