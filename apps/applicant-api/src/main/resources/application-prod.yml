@@ -1,6 +1,7 @@
 spring:
   cloud:
     consul:
+      enabled: true
       config:
         enabled: true
   data:

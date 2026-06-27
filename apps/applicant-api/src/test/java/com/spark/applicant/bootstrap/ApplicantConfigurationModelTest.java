@@ -20,6 +20,7 @@ class ApplicantConfigurationModelTest {
 
         assertThat(applicationYaml).contains("import:");
         assertThat(applicationYaml).contains("\"optional:consul:\"");
+        assertThat(applicationYaml).contains("consul:\n      enabled: false");
         assertThat(applicationYaml).contains("format: yaml");
         assertThat(applicationYaml).contains("watch:");
         assertThat(applicationYaml).contains("enabled: false");
