@@ -26,7 +26,7 @@ class JavaQualityTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         for project in expected_projects:
             self.assertIn(f"JAVA_PROJECT_SELECT {project}", result.stdout)
-        for project in {"money", "spring-starter", "applicant-api"} - set(expected_projects):
+        for project in {"money", "spring-starter", "applicant-api", "quote-api"} - set(expected_projects):
             self.assertNotIn(f"JAVA_PROJECT_SELECT {project}", result.stdout)
         for layer in expected_layers:
             self.assertIn(f"JAVA_PROJECT_LAYER {layer}", result.stdout)
@@ -41,8 +41,8 @@ class JavaQualityTest(unittest.TestCase):
     def test_spring_starter_change_selects_spring_starter_and_applicant_api(self):
         self.assert_plan(
             ["packages/java/spring-starter/src/main/java/com/spark/starter/Port.java"],
-            ["spring-starter", "applicant-api"],
-            ["1 spring-starter", "2 applicant-api"],
+            ["spring-starter", "applicant-api", "quote-api"],
+            ["1 spring-starter", "2 applicant-api quote-api"],
         )
 
     def test_applicant_api_change_includes_required_upstream_dependencies(self):
@@ -52,14 +52,21 @@ class JavaQualityTest(unittest.TestCase):
             ["1 spring-starter", "2 applicant-api"],
         )
 
+    def test_quote_api_change_includes_required_upstream_dependencies(self):
+        self.assert_plan(
+            ["apps/quote-api/pom.xml"],
+            ["spring-starter", "quote-api"],
+            ["1 spring-starter", "2 quote-api"],
+        )
+
     def test_money_and_spring_starter_changes_parallelize_independent_projects(self):
         self.assert_plan(
             [
                 "packages/java/money/src/main/java/com/spark/common/Money.java",
                 "packages/java/spring-starter/src/main/java/com/spark/starter/Port.java",
             ],
-            ["money", "spring-starter", "applicant-api"],
-            ["1 money spring-starter", "2 applicant-api"],
+            ["money", "spring-starter", "applicant-api", "quote-api"],
+            ["1 money spring-starter", "2 applicant-api quote-api"],
         )
 
     def test_non_java_change_skips_successfully(self):
@@ -71,8 +78,8 @@ class JavaQualityTest(unittest.TestCase):
     def test_quality_tool_change_selects_all_projects(self):
         self.assert_plan(
             ["tooling/java-quality/java_quality.py"],
-            ["money", "spring-starter", "applicant-api"],
-            ["1 money spring-starter", "2 applicant-api"],
+            ["money", "spring-starter", "applicant-api", "quote-api"],
+            ["1 money spring-starter", "2 applicant-api quote-api"],
         )
 
     def test_unknown_java_project_fails(self):
@@ -131,6 +138,7 @@ class JavaQualityTest(unittest.TestCase):
             self.assertIn("JAVA_PROJECT_SELECT money", result.stdout)
             self.assertIn("JAVA_PROJECT_SELECT spring-starter", result.stdout)
             self.assertIn("JAVA_PROJECT_SELECT applicant-api", result.stdout)
+            self.assertIn("JAVA_PROJECT_SELECT quote-api", result.stdout)
 
     def test_maven_command_uses_workspace_local_repository(self):
         import importlib.util
@@ -164,6 +172,10 @@ class JavaQualityTest(unittest.TestCase):
 
         self.assertEqual(
             module.PROJECTS["applicant-api"].dependencies,
+            ("spring-starter",),
+        )
+        self.assertEqual(
+            module.PROJECTS["quote-api"].dependencies,
             ("spring-starter",),
         )
         self.assertEqual(

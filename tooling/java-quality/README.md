@@ -23,4 +23,4 @@ python3 tooling/java-quality/java_quality.py run-project money
 python3 tooling/java-quality/java_quality.py run-project spring-starter --plan /tmp/java-quality-plan.json --skip-unselected
 ```
 
-每个项目执行 Spotless、Checkstyle、单元测试和 SpotBugs。`spring-starter` 成功后会执行 `mvn install`，供 `applicant-api` 消费同分支 snapshot。
+每个项目执行 Spotless、Checkstyle、单元测试和 SpotBugs。`spring-starter` 成功后会执行 `mvn install`，供 `applicant-api` 和 `quote-api` 消费同分支 snapshot。
