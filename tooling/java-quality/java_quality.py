@@ -112,6 +112,19 @@ def expand_dependents(selected: set[str]) -> set[str]:
     return expanded
 
 
+def expand_dependencies(selected: set[str]) -> set[str]:
+    expanded = set(selected)
+    changed = True
+    while changed:
+        changed = False
+        for project_name in tuple(expanded):
+            for dependency in PROJECTS[project_name].dependencies:
+                if dependency not in expanded:
+                    expanded.add(dependency)
+                    changed = True
+    return expanded
+
+
 def selected_projects(changed_paths: list[str]) -> tuple[list[str], list[str]]:
     selected: set[str] = set()
     unknown: list[str] = []
@@ -128,7 +141,8 @@ def selected_projects(changed_paths: list[str]) -> tuple[list[str], list[str]]:
         elif project_name:
             selected.add(project_name)
 
-    return sorted(expand_dependents(selected), key=project_order), unknown
+    expanded = expand_dependencies(expand_dependents(selected))
+    return sorted(expanded, key=project_order), unknown
 
 
 def project_order(project_name: str) -> tuple[int, str]:

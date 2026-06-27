@@ -45,6 +45,13 @@ class JavaQualityTest(unittest.TestCase):
             ["1 spring-starter", "2 applicant-api"],
         )
 
+    def test_applicant_api_change_includes_required_upstream_dependencies(self):
+        self.assert_plan(
+            ["apps/applicant-api/pom.xml"],
+            ["spring-starter", "applicant-api"],
+            ["1 spring-starter", "2 applicant-api"],
+        )
+
     def test_money_and_spring_starter_changes_parallelize_independent_projects(self):
         self.assert_plan(
             [

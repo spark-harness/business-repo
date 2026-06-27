@@ -1,3 +1,16 @@
+spring:
+  cloud:
+    consul:
+      enabled: true
+      config:
+        enabled: true
+  data:
+    redis:
+      host: ""
+      port: 6379
+      password: ""
+      timeout: 2s
+
 management:
   health:
     redis:
@@ -9,8 +22,8 @@ otel:
   propagators: tracecontext,baggage
   traces:
     exporter: otlp
-    sampler: ${OTEL_TRACES_SAMPLER:parentbased_traceidratio}
-    sampler.arg: ${OTEL_TRACES_SAMPLER_ARG:0.1}
+    sampler: parentbased_traceidratio
+    sampler.arg: 0.1
   metrics:
     exporter: none
   logs:
@@ -19,8 +32,8 @@ otel:
     otlp:
       traces:
         protocol: http/protobuf
-        endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:}
-        headers: ${OTEL_EXPORTER_OTLP_TRACES_HEADERS:}
+        endpoint: ""
+        headers: ""
 
 spark:
   applicant:
@@ -28,24 +41,16 @@ spark:
       runtime-store: redis-jdbc
       otp-provider: disabled
       token-mode: hmac
-      jdbc-url: ${APPLICANT_DB_URL:}
-      jdbc-username: ${APPLICANT_DB_USERNAME:}
-      jdbc-password: ${APPLICANT_DB_PASSWORD:}
-      token-secret: ${APPLICANT_TOKEN_SECRET:}
-      migrations-enabled: ${APPLICANT_MIGRATIONS_ENABLED:true}
+      jdbc-url: ""
+      jdbc-username: ""
+      jdbc-password: ""
+      token-secret: ""
+      migrations-enabled: true
       consul:
         enabled: true
-        url: ${APPLICANT_CONSUL_URL:}
+        url: ""
         service-name: applicant-api
-        service-address: ${APPLICANT_SERVICE_ADDRESS:}
-        http-port: ${SERVER_PORT:8080}
-        grpc-port: ${APPLICANT_GRPC_PORT:9090}
-        health-check-url: ${APPLICANT_CONSUL_HEALTH_CHECK_URL:}
-
-spring:
-  data:
-    redis:
-      host: ${APPLICANT_REDIS_HOST:}
-      port: ${APPLICANT_REDIS_PORT:6379}
-      password: ${APPLICANT_REDIS_PASSWORD:}
-      timeout: 2s
+        service-address: ""
+        http-port: 8080
+        grpc-port: 9090
+        health-check-url: ""

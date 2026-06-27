@@ -33,6 +33,30 @@ mvn test
 
 普通 `mvn test` 会在测试注解中显式覆盖为 `in-memory` runtime store，不依赖本机中间件。直接启动应用时默认使用 `redis-jdbc`、`test` OTP provider 和 `hmac` token mode。
 
+配置来源优先级固定为：
+
+```text
+application.yml 默认值 < Consul YAML 中心配置 < .env / K8s 环境变量
+```
+
+`application.yml` 中的连接地址、密码和 token secret 只适用于本地开发。STA 和生产必须通过 Consul 中心配置提供非密共享配置，并通过 `.env` 或 K8s Secret 注入 secret。
+
+环境覆盖使用 Spring Boot canonical property 对应的 relaxed binding 命名，不维护字段级短别名。例如：
+
+| Property | Env |
+|---|---|
+| `spark.applicant.auth.jdbc-url` | `SPARK_APPLICANT_AUTH_JDBC_URL` |
+| `spark.applicant.auth.jdbc-username` | `SPARK_APPLICANT_AUTH_JDBC_USERNAME` |
+| `spark.applicant.auth.jdbc-password` | `SPARK_APPLICANT_AUTH_JDBC_PASSWORD` |
+| `spark.applicant.auth.token-secret` | `SPARK_APPLICANT_AUTH_TOKEN_SECRET` |
+| `spark.applicant.auth.consul.url` | `SPARK_APPLICANT_AUTH_CONSUL_URL` |
+| `spark.applicant.auth.consul.service-address` | `SPARK_APPLICANT_AUTH_CONSUL_SERVICE_ADDRESS` |
+| `spark.grpc.server.port` | `SPARK_GRPC_SERVER_PORT` |
+| `spring.data.redis.host` | `SPRING_DATA_REDIS_HOST` |
+| `spring.data.redis.password` | `SPRING_DATA_REDIS_PASSWORD` |
+
+可以从 `.env.example` 复制本地私有 `.env`。`.env` 不得提交。
+
 启动本地依赖：
 
 ```bash
@@ -42,8 +66,6 @@ docker compose -f docker-compose.local.yml up -d
 启动服务：
 
 ```bash
-APPLICANT_TOKEN_SECRET=local-dev-token-secret \
-APPLICANT_MIGRATIONS_ENABLED=true \
 mvn spring-boot:run
 ```
 
@@ -56,8 +78,8 @@ OTEL_TRACES_EXPORTER=otlp \
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://o123456.ingest.sentry.io/api/1/otel/v1/traces \
 OTEL_EXPORTER_OTLP_TRACES_HEADERS='x-sentry-auth=sentry sentry_key=public,sentry_version=7' \
 OTEL_TRACES_SAMPLER_ARG=1.0 \
-APPLICANT_TOKEN_SECRET=local-dev-token-secret \
-APPLICANT_MIGRATIONS_ENABLED=true \
+SPARK_APPLICANT_AUTH_TOKEN_SECRET=local-dev-token-secret \
+SPARK_APPLICANT_AUTH_MIGRATIONS_ENABLED=true \
 mvn spring-boot:run
 ```
 
@@ -75,7 +97,7 @@ ALLOW_LOCAL_RUNTIME_RESET=true ./scripts/reset-local-runtime.sh
 
 smoke 会通过 gRPC 调用 `SendOtp` / `VerifyOtp`，再验证 PostgreSQL 中存在对应 applicant 记录，并验证 Redis 中存在 `applicant-api:*` runtime key。
 
-生产 profile 使用 `redis-jdbc` runtime store、`disabled` OTP provider 和 `hmac` token mode：
+生产 profile 使用 `redis-jdbc` runtime store、`disabled` OTP provider 和 `hmac` token mode。以下示例只展示 canonical property；实际 secret 应由 `.env` 或 K8s Secret 注入：
 
 ```yaml
 spring:
@@ -92,13 +114,13 @@ spark:
     auth:
       jdbc-url: jdbc:postgresql://localhost:5432/applicant
       jdbc-username: applicant
-      jdbc-password: ${APPLICANT_DB_PASSWORD}
-      token-secret: ${APPLICANT_TOKEN_SECRET}
-      migrations-enabled: ${APPLICANT_MIGRATIONS_ENABLED:true}
+      jdbc-password: ""
+      token-secret: ""
+      migrations-enabled: true
       consul:
         enabled: true
-        url: ${APPLICANT_CONSUL_URL}
-        service-address: ${APPLICANT_SERVICE_ADDRESS}
+        url: http://consul.example:8500
+        service-address: applicant-api.example
 
 otel:
   service:
@@ -115,9 +137,9 @@ otel:
         headers: ${OTEL_EXPORTER_OTLP_TRACES_HEADERS}
 ```
 
-生产 profile 会在启动时拒绝 `test` OTP provider、非 `redis-jdbc` runtime store、非 `hmac` token mode、空 JDBC URL、空 Redis host、空 Consul URL、空 Consul service address、空 token secret、空 OTLP traces endpoint 或空 OTLP traces headers。
+生产 profile 会在启动时拒绝 `test` OTP provider、非 `redis-jdbc` runtime store、非 `hmac` token mode、空 JDBC URL、空 Redis host、空 Redis password、空 Consul URL、空 Consul service address、空 token secret、空 OTLP traces endpoint 或空 OTLP traces headers。
 
-数据库 schema 由 Flyway 版本迁移管理。默认启用 `migrations-enabled`，如需临时关闭可设置 `APPLICANT_MIGRATIONS_ENABLED=false`。
+数据库 schema 由 Flyway 版本迁移管理。默认启用 `migrations-enabled`，如需临时关闭可设置 `SPARK_APPLICANT_AUTH_MIGRATIONS_ENABLED=false`。
 
 ## Readiness
 
