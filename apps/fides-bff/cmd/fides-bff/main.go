@@ -12,13 +12,10 @@ import (
 	"time"
 
 	"github.com/go-kratos/kratos/v2"
-	"github.com/go-kratos/kratos/v2/config"
-	"github.com/go-kratos/kratos/v2/config/file"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/transport/http"
 
 	"github.com/spark/fides-bff/internal/biz"
-	"github.com/spark/fides-bff/internal/conf"
 	"github.com/spark/fides-bff/internal/observability"
 )
 
@@ -60,15 +57,8 @@ func main() {
 		"service.version", Version,
 	)
 
-	c := config.New(config.WithSource(file.NewSource(flagconf)))
-	defer func() { _ = c.Close() }()
-
-	if err := c.Load(); err != nil {
-		panic(err)
-	}
-
-	var bc conf.Bootstrap
-	if err := c.Scan(&bc); err != nil {
+	bc, err := loadBootstrap(loadConfigOptions{ConfigPath: flagconf})
+	if err != nil {
 		panic(err)
 	}
 

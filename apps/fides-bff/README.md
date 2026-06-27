@@ -87,6 +87,15 @@ make init       # 安装 wire / golangci-lint 工具
 
 ## 配置
 
+启动期配置按以下优先级合并，后者覆盖前者：
+
+1. `configs/config.yaml`：最低优先级默认值。
+2. `.env`：只在本地启动前加载进进程环境；缺失不报错，且不覆盖已经存在的 shell、CI 或 K8s 环境变量。
+3. 无前缀环境变量：只接受 `.env.example` 中列出的 allowlist key，并显式映射到 Kratos config path。
+4. Consul KV YAML：启用后作为远程启动期配置源，覆盖本地默认值和环境映射值。
+
+这不是运行时热更新；配置变更需要重启进程后生效。
+
 `configs/config.yaml`：
 
 ```yaml
@@ -124,6 +133,50 @@ observability:
     environment: local
     release: dev
 ```
+
+本地可复制 `.env.example` 为 `.env` 后调整私有值。`.env` 已被 git ignore，不要提交真实 token、密码、Authorization header 或其他 secret。
+
+无前缀环境变量只支持显式 allowlist，宿主机上的无关变量不会进入配置树。首批 allowlist 覆盖：
+
+- `SERVER_*`
+- `APPLICANT_*`
+- `REGISTRY_*`
+- `OBSERVABILITY_*`
+
+Consul 配置源通过 bootstrap 环境变量启用，bootstrap 值必须来自本地环境或平台 Secret，不能从 Consul 自举读取：
+
+```text
+CONFIG_CONSUL_ENABLED=true
+CONFIG_CONSUL_SCHEME=http
+CONFIG_CONSUL_ADDRESS=127.0.0.1:8500
+CONFIG_CONSUL_PATH=config/lendora/fides-bff/config.yaml
+CONFIG_CONSUL_TOKEN=<from-local-env-or-platform-secret>
+```
+
+Consul KV value 应保存一份可审查的 YAML，而不是把每个字段拆成碎片 key。默认路径约定：
+
+```text
+config/lendora/fides-bff/config.yaml
+```
+
+示例 YAML 只放非密运行配置：
+
+```yaml
+server:
+  http:
+    addr: 127.0.0.1:8000
+applicant:
+  consul:
+    address: 127.0.0.1:8500
+registry:
+  consul:
+    discovery_addr: 127.0.0.1:8000
+observability:
+  otel:
+    environment: local
+```
+
+Consul KV 不保存 token、密码或其他 secret。Consul 不可访问、配置 key 缺失或 YAML 格式无效时，服务启动失败，并输出不包含敏感值的错误。
 
 ## API
 
