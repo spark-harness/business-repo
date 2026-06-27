@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: origination-api
+  config:
+    import:
+      - "optional:file:.env[.properties]"
+
+management:
+  health:
+    db:
+      enabled: true
+
+otel:
+  service:
+    name: origination-api
+  propagators: tracecontext,baggage
+  traces:
+    exporter: ${OTEL_TRACES_EXPORTER:none}
+  metrics:
+    exporter: none
+  logs:
+    exporter: none
+
+spark:
+  origination:
+    jdbc-url: ${ORIGINATION_JDBC_URL:jdbc:h2:mem:origination;MODE=PostgreSQL;DB_CLOSE_DELAY=-1}
+    jdbc-username: ${ORIGINATION_JDBC_USERNAME:sa}
+    jdbc-password: ${ORIGINATION_JDBC_PASSWORD:}
+    quote-api-base-url: ${ORIGINATION_QUOTE_API_BASE_URL:http://localhost:8080}
+    quote-api-timeout: ${ORIGINATION_QUOTE_API_TIMEOUT:3s}
