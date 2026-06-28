@@ -82,6 +82,7 @@ type ServiceRegistryConsul struct {
 	Enabled                bool              `json:"enabled"`
 	Address                string            `json:"address"`
 	Scheme                 string            `json:"scheme"`
+	ServiceName            string            `json:"service_name"`
 	DiscoveryAddr          string            `json:"discovery_addr"`
 	Heartbeat              bool              `json:"heartbeat"`
 	HealthCheck            bool              `json:"health_check"`

@@ -33,8 +33,12 @@ func init() {
 }
 
 func newApp(logger log.Logger, hs *http.Server, registration *registration) *kratos.App {
+	name := Name
+	if registration != nil && registration.name != "" {
+		name = registration.name
+	}
 	opts := []kratos.Option{
-		kratos.Name(Name),
+		kratos.Name(name),
 		kratos.Version(Version),
 		kratos.Logger(logger),
 		kratos.Server(hs),
