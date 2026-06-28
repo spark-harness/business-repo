@@ -41,6 +41,7 @@ registry:
     enabled: true
     address: 127.0.0.1:8500
     scheme: http
+    service_name: fides-bff
     discovery_addr: 127.0.0.1:8000
     heartbeat: true
     health_check: true

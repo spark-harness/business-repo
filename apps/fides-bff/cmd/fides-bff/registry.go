@@ -16,6 +16,7 @@ import (
 type registration struct {
 	registrar registry.Registrar
 	endpoint  *url.URL
+	name      string
 	metadata  map[string]string
 }
 
@@ -48,6 +49,7 @@ func newConsulRegistration(c *conf.Registry) (*registration, error) {
 	return &registration{
 		registrar: kratosconsul.New(client, opts...),
 		endpoint:  endpoint,
+		name:      firstNonEmpty(cfg.ServiceName, Name),
 		metadata:  registryMetadata(c),
 	}, nil
 }

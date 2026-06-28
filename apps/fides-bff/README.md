@@ -52,7 +52,7 @@ Consul API: 127.0.0.1:8500
 Service name: applicant-api
 ```
 
-`fides-bff` 启动时也会注册到 Consul，默认服务名为 `fides-bff`，发现地址为 `127.0.0.1:8000`。本地如果修改 HTTP 监听端口，需要同步修改 `registry.consul.discovery_addr`，不要把 `0.0.0.0` 作为发现地址。
+`fides-bff` 启动时也会注册到 Consul，默认服务名为 `fides-bff`，发现地址为 `127.0.0.1:8000`。K8s 环境应通过 `registry.consul.service_name` 配置环境化服务名，例如 `dev-1-fides-bff`。本地如果修改 HTTP 监听端口，需要同步修改 `registry.consul.discovery_addr`，不要把 `0.0.0.0` 作为发现地址。
 
 `fides-bff` 不保存 OTP 状态，也不硬编码 applicant 地址；如果 Consul 没有健康的 `applicant-api` 实例，auth API 返回统一错误信封，错误码为 `applicant_unavailable`。
 
@@ -116,6 +116,7 @@ registry:
     enabled: true
     address: 127.0.0.1:8500
     scheme: http
+    service_name: fides-bff
     discovery_addr: 127.0.0.1:8000
     heartbeat: true
     health_check: true

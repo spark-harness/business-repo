@@ -81,6 +81,24 @@ func TestNewConsulRegistrarRegistersFidesBFF(t *testing.T) {
 	}
 }
 
+func TestNewConsulRegistrarUsesConfiguredServiceName(t *testing.T) {
+	registration, err := newConsulRegistration(&conf.Registry{
+		Consul: conf.ServiceRegistryConsul{
+			Enabled:       true,
+			Address:       "127.0.0.1:8500",
+			Scheme:        "http",
+			ServiceName:   "dev-1-fides-bff",
+			DiscoveryAddr: "127.0.0.1:8000",
+		},
+	})
+	if err != nil {
+		t.Fatalf("new registration: %v", err)
+	}
+	if registration.name != "dev-1-fides-bff" {
+		t.Fatalf("service name = %q", registration.name)
+	}
+}
+
 func TestNewConsulRegistrarDisabled(t *testing.T) {
 	registration, err := newConsulRegistration(&conf.Registry{Consul: conf.ServiceRegistryConsul{Enabled: false}})
 	if err != nil {
