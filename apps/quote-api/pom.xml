@@ -15,13 +15,27 @@
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <spring-boot.version>3.5.14</spring-boot.version>
+    <jackson-bom.version>2.21.4</jackson-bom.version>
     <postgresql.version>42.7.11</postgresql.version>
+    <tomcat.version>10.1.55</tomcat.version>
     <spark.common.version>0.1.0-SNAPSHOT</spark.common.version>
     <java.quality.config.dir>${project.basedir}/../../tooling/java-quality/config</java.quality.config.dir>
   </properties>
 
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson-bom.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.tomcat.embed</groupId>
+        <artifactId>tomcat-embed-core</artifactId>
+        <version>${tomcat.version}</version>
+      </dependency>
       <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-dependencies</artifactId>
