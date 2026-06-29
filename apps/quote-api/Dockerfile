@@ -28,7 +28,9 @@ RUN --mount=type=secret,id=github_token \
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-RUN addgroup -S spark && adduser -S -G spark spark
+RUN apk upgrade --no-cache p11-kit p11-kit-trust \
+    && addgroup -S spark \
+    && adduser -S -G spark spark
 COPY --from=build /workspace/apps/quote-api/target/quote-api-*.jar /app/quote-api.jar
 USER spark
 EXPOSE 8080
