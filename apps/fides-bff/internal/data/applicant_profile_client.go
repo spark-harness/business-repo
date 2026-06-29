@@ -4,9 +4,11 @@ import (
 	"context"
 
 	applicantv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/applicant/v1"
-	"github.com/spark/fides-bff/internal/biz"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/spark/fides-bff/internal/biz"
 )
 
 func (c *ApplicantAuthClient) UpsertIdentityProfile(ctx context.Context, command biz.UpsertIdentityProfileCommand) (biz.IdentityProfile, error) {

@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 TOOL_ROOT = Path(__file__).resolve().parents[1]
@@ -41,8 +42,8 @@ class JavaQualityTest(unittest.TestCase):
     def test_spring_starter_change_selects_spring_starter_and_applicant_api(self):
         self.assert_plan(
             ["packages/java/spring-starter/src/main/java/com/spark/starter/Port.java"],
-            ["spring-starter", "applicant-api", "quote-api"],
-            ["1 spring-starter", "2 applicant-api quote-api"],
+            ["spring-starter", "applicant-api", "origination-api", "quote-api"],
+            ["1 spring-starter", "2 applicant-api origination-api quote-api"],
         )
 
     def test_applicant_api_change_includes_required_upstream_dependencies(self):
@@ -65,8 +66,8 @@ class JavaQualityTest(unittest.TestCase):
                 "packages/java/money/src/main/java/com/spark/common/Money.java",
                 "packages/java/spring-starter/src/main/java/com/spark/starter/Port.java",
             ],
-            ["money", "spring-starter", "applicant-api", "quote-api"],
-            ["1 money spring-starter", "2 applicant-api quote-api"],
+            ["money", "spring-starter", "applicant-api", "origination-api", "quote-api"],
+            ["1 money spring-starter", "2 applicant-api origination-api quote-api"],
         )
 
     def test_non_java_change_skips_successfully(self):
@@ -78,8 +79,8 @@ class JavaQualityTest(unittest.TestCase):
     def test_quality_tool_change_selects_all_projects(self):
         self.assert_plan(
             ["tooling/java-quality/java_quality.py"],
-            ["money", "spring-starter", "applicant-api", "quote-api"],
-            ["1 money spring-starter", "2 applicant-api quote-api"],
+            ["money", "spring-starter", "applicant-api", "origination-api", "quote-api"],
+            ["1 money spring-starter", "2 applicant-api origination-api quote-api"],
         )
 
     def test_unknown_java_project_fails(self):
@@ -156,6 +157,54 @@ class JavaQualityTest(unittest.TestCase):
         command = module.maven_command("applicant-api", "verify")
 
         self.assertIn(f"-Dmaven.repo.local={module.MAVEN_REPO_LOCAL}", command)
+
+    def test_maven_command_uses_settings_file_when_provided(self):
+        import importlib.util
+
+        module_name = "java_quality_maven_settings_test"
+        spec = importlib.util.spec_from_file_location(module_name, SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        self.assertIsNotNone(spec.loader)
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(module_name, None)
+
+        command = module.maven_command("applicant-api", "verify", Path("/tmp/settings.xml"))
+
+        self.assertEqual(command[1:3], ["-s", "/tmp/settings.xml"])
+
+    def test_run_maven_retries_transient_transfer_failure(self):
+        import importlib.util
+
+        module_name = "java_quality_maven_retry_test"
+        spec = importlib.util.spec_from_file_location(module_name, SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        self.assertIsNotNone(spec.loader)
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(module_name, None)
+
+        calls = [
+            subprocess.CompletedProcess(
+                args=["mvn"],
+                returncode=1,
+                stdout="Could not transfer artifact x: Remote host terminated the handshake",
+            ),
+            subprocess.CompletedProcess(args=["mvn"], returncode=0, stdout="ok\n"),
+        ]
+
+        with mock.patch.object(module, "MAVEN_ATTEMPTS", 2), mock.patch.object(module.time, "sleep"), mock.patch.object(
+            module.subprocess,
+            "run",
+            side_effect=calls,
+        ):
+            result = module.run_maven("applicant-api", "verify")
+
+        self.assertEqual(result, 0)
 
     def test_projects_are_loaded_from_yaml_config(self):
         import importlib.util
