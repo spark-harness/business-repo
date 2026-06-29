@@ -6,6 +6,10 @@ export class BrowserDraftStore implements DraftStore {
   constructor(private readonly storage: Storage | undefined = getSessionStorage()) {}
 
   async loadDraftPointer(): Promise<DraftPointer | null> {
+    return this.loadStoredDraftPointer();
+  }
+
+  loadStoredDraftPointer(): DraftPointer | null {
     const raw = this.storage?.getItem(DRAFT_POINTER_KEY);
     if (!raw) {
       return null;

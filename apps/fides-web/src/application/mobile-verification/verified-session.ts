@@ -5,6 +5,7 @@ export type VerifiedSession = VerifyOtpResult;
 export interface SessionStore {
   saveVerifiedSession(session: VerifiedSession): Promise<void>;
   clearVerifiedSession(): Promise<void>;
+  getApplicantIdForRequest?(): string | null;
 }
 
 export interface FlowControllerPort {

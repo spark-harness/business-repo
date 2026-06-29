@@ -10,6 +10,7 @@ import type {
 
 type LoanRequestScreenProps = {
   controller: LoanRequestController;
+  onContinue?: () => void;
 };
 
 type FormError = {
@@ -26,7 +27,7 @@ const purposeOptions = [
   { value: "other", label: "Other" },
 ];
 
-export function LoanRequestScreen({ controller }: LoanRequestScreenProps) {
+export function LoanRequestScreen({ controller, onContinue }: LoanRequestScreenProps) {
   const [amount, setAmount] = useState("50,000");
   const [term, setTerm] = useState(9);
   const [purpose, setPurpose] = useState("");
@@ -109,7 +110,9 @@ export function LoanRequestScreen({ controller }: LoanRequestScreenProps) {
       });
       if (!result.ok) {
         setError(result.error);
+        return;
       }
+      onContinue?.();
     } finally {
       setIsSaving(false);
     }

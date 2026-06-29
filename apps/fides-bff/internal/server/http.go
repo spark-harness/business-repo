@@ -21,6 +21,7 @@ func NewHTTPServer(
 	auth *service.AuthService,
 	pricing *service.PricingService,
 	origination *service.OriginationService,
+	identityProfile *service.IdentityProfileService,
 	tokenValidator bffkit.TokenValidator,
 	store bffkit.IdempotencyStore,
 	logger log.Logger,
@@ -29,7 +30,17 @@ func NewHTTPServer(
 		http.ErrorEncoder(bffkit.ErrorEncoder),
 		http.Filter(
 			bffkit.TraceFilter(log.NewHelper(logger)),
-			bffkit.CORSFilter(bffkit.CORSConfig{AllowedOrigins: c.CORS.AllowedOrigins, MaxAgeSec: 600}),
+			bffkit.CORSFilter(bffkit.CORSConfig{
+				AllowedOrigins: c.CORS.AllowedOrigins,
+				AllowedMethods: []string{
+					nethttp.MethodGet,
+					nethttp.MethodPost,
+					nethttp.MethodPatch,
+					nethttp.MethodPut,
+					nethttp.MethodOptions,
+				},
+				MaxAgeSec: 600,
+			}),
 			protectedPathAuthFilter(tokenValidator),
 			bffkit.IdempotencyFilter(store),
 		),
@@ -48,6 +59,8 @@ func NewHTTPServer(
 	v1.POST("/loan-applications", origination.CreateLoanApplication)
 	v1.GET("/loan-applications/{applicationId}", origination.GetLoanApplication)
 	v1.PATCH("/loan-applications/{applicationId}", origination.PatchLoanApplication)
+	v1.GET("/me/identity-profile", identityProfile.GetIdentityProfile)
+	v1.PUT("/me/identity-profile", identityProfile.UpsertIdentityProfile)
 	srv.Handle("/api/v1/protected/session:probe", nethttp.HandlerFunc(protectedSessionProbe))
 	fidesbffv1pb.RegisterFidesBffAuthServiceHTTPServer(srv, auth)
 	return srv
@@ -69,7 +82,8 @@ func isProtectedPath(path string) bool {
 	return strings.HasPrefix(path, "/api/v1/protected/") ||
 		strings.HasPrefix(path, "/api/v1/pricing/") ||
 		path == "/api/v1/loan-applications" ||
-		strings.HasPrefix(path, "/api/v1/loan-applications/")
+		strings.HasPrefix(path, "/api/v1/loan-applications/") ||
+		path == "/api/v1/me/identity-profile"
 }
 
 func protectedSessionProbe(w nethttp.ResponseWriter, r *nethttp.Request) {

@@ -27,6 +27,8 @@ class LoanApplicationUseCaseTest {
     private final PatchLoanApplicationUseCase patchUseCase =
             new PatchLoanApplicationUseCase(applications, idempotency, quoteGateway, clock);
     private final GetLoanApplicationUseCase getUseCase = new GetLoanApplicationUseCase(applications);
+    private final AdvanceApplicationStepUseCase advanceStepUseCase =
+            new AdvanceApplicationStepUseCase(applications, clock);
 
     @Test
     void create_withValidQuote_createsDraftAndSnapshotsQuote() {
@@ -129,6 +131,55 @@ class LoanApplicationUseCaseTest {
 
         assertThatThrownBy(() -> getUseCase.get(application.applicationId()))
                 .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void advanceStep_withOwnerAndIdentityInformationTarget_updatesCurrentStep() {
+        TestPrincipal.set("applicant_001");
+        quoteGateway.quote = quote("quote_1", "applicant_001", "100000.00", 12, "debt_consolidation");
+        LoanApplication application = createUseCase.create(new CreateLoanApplicationCommand(
+                "PIL", loan("100000.00", 12, "debt_consolidation"), "quote_1", "idem-create-1"));
+
+        LoanApplication advanced = advanceStepUseCase.advance(new AdvanceApplicationStepCommand(
+                application.applicationId(), ApplicationStep.IDENTITY_INFORMATION));
+
+        assertThat(advanced.currentStep()).isEqualTo(ApplicationStep.IDENTITY_INFORMATION);
+        assertThat(getUseCase.get(application.applicationId()).currentStep()).isEqualTo(ApplicationStep.IDENTITY_INFORMATION);
+    }
+
+    @Test
+    void advanceStep_whenApplicationIdIsBlank_shouldReject() {
+        TestPrincipal.set("applicant_001");
+
+        assertThatThrownBy(() -> advanceStepUseCase.advance(new AdvanceApplicationStepCommand(
+                        " ", ApplicationStep.IDENTITY_INFORMATION)))
+                .isInstanceOf(ApplicationRequiredException.class);
+    }
+
+    @Test
+    void advanceStep_withDifferentApplicant_rejectsAccess() {
+        TestPrincipal.set("applicant_001");
+        quoteGateway.quote = quote("quote_1", "applicant_001", "100000.00", 12, "debt_consolidation");
+        LoanApplication application = createUseCase.create(new CreateLoanApplicationCommand(
+                "PIL", loan("100000.00", 12, "debt_consolidation"), "quote_1", "idem-create-1"));
+
+        TestPrincipal.set("applicant_002");
+
+        assertThatThrownBy(() -> advanceStepUseCase.advance(new AdvanceApplicationStepCommand(
+                        application.applicationId(), ApplicationStep.IDENTITY_INFORMATION)))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void advanceStep_withLoanRequestTarget_rejectsInvalidStep() {
+        TestPrincipal.set("applicant_001");
+        quoteGateway.quote = quote("quote_1", "applicant_001", "100000.00", 12, "debt_consolidation");
+        LoanApplication application = createUseCase.create(new CreateLoanApplicationCommand(
+                "PIL", loan("100000.00", 12, "debt_consolidation"), "quote_1", "idem-create-1"));
+
+        assertThatThrownBy(() -> advanceStepUseCase.advance(new AdvanceApplicationStepCommand(
+                        application.applicationId(), ApplicationStep.LOAN_REQUEST)))
+                .isInstanceOf(InvalidStepException.class);
     }
 
     @Test

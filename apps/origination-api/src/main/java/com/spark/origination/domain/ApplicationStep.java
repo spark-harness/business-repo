@@ -1,7 +1,8 @@
 package com.spark.origination.domain;
 
 public enum ApplicationStep {
-    LOAN_REQUEST("loan_request");
+    LOAN_REQUEST("loan_request"),
+    IDENTITY_INFORMATION("identity_information");
 
     private final String value;
 
@@ -11,5 +12,14 @@ public enum ApplicationStep {
 
     public String value() {
         return value;
+    }
+
+    public static ApplicationStep fromValue(String value) {
+        for (ApplicationStep step : values()) {
+            if (step.value.equals(value)) {
+                return step;
+            }
+        }
+        throw new ValidationException("invalid application step");
     }
 }

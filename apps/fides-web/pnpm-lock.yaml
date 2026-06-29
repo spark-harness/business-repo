@@ -24,8 +24,8 @@ importers:
         specifier: ^2.8.0
         version: 2.8.0(@opentelemetry/api@1.9.1)
       '@spark-harness/idl-ts-client':
-        specifier: git+ssh://git@github.com/spark-harness/idl-ts-repo.git#semver:v0.1.0-len98.4
-        version: git+https://git@github.com:spark-harness/idl-ts-repo.git#96616205858b6a4943470ba3e5667ff06145eac0
+        specifier: git+ssh://git@github.com/spark-harness/idl-ts-repo.git#semver:v0.2.4
+        version: git+ssh://git@github.com/spark-harness/idl-ts-repo.git#40a709624d6d46160d50cb59b6df45a07bc979b1
       next:
         specifier: 16.2.9
         version: 16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -706,8 +706,8 @@ packages:
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
 
-  '@spark-harness/idl-ts-client@git+https://git@github.com:spark-harness/idl-ts-repo.git#96616205858b6a4943470ba3e5667ff06145eac0':
-    resolution: {commit: 96616205858b6a4943470ba3e5667ff06145eac0, repo: git@github.com:spark-harness/idl-ts-repo.git, type: git}
+  '@spark-harness/idl-ts-client@git+ssh://git@github.com/spark-harness/idl-ts-repo.git#40a709624d6d46160d50cb59b6df45a07bc979b1':
+    resolution: {commit: 40a709624d6d46160d50cb59b6df45a07bc979b1, repo: git@github.com:spark-harness/idl-ts-repo.git, type: git}
     version: 0.1.0
 
   '@standard-schema/spec@1.1.0':
@@ -3212,7 +3212,7 @@ snapshots:
 
   '@rtsao/scc@1.1.0': {}
 
-  '@spark-harness/idl-ts-client@git+https://git@github.com:spark-harness/idl-ts-repo.git#96616205858b6a4943470ba3e5667ff06145eac0': {}
+  '@spark-harness/idl-ts-client@git+ssh://git@github.com/spark-harness/idl-ts-repo.git#40a709624d6d46160d50cb59b6df45a07bc979b1': {}
 
   '@standard-schema/spec@1.1.0': {}
 

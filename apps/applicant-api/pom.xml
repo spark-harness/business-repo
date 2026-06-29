@@ -21,7 +21,7 @@
     <postgresql.version>42.7.11</postgresql.version>
     <tomcat.version>10.1.55</tomcat.version>
     <spark.common.version>0.1.0-SNAPSHOT</spark.common.version>
-    <spark.contract.version>0.2.1</spark.contract.version>
+    <spark.contract.version>0.2.4</spark.contract.version>
     <grpc-java.version>1.81.0</grpc-java.version>
     <opentelemetry.version>1.60.1</opentelemetry.version>
     <opentelemetry.instrumentation.version>2.26.0</opentelemetry.instrumentation.version>

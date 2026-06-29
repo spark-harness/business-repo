@@ -17,7 +17,7 @@
     "@opentelemetry/core": "^2.8.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.219.0",
     "@opentelemetry/sdk-trace-web": "^2.8.0",
-    "@spark-harness/idl-ts-client": "git+ssh://git@github.com/spark-harness/idl-ts-repo.git#semver:v0.1.0-len98.4",
+    "@spark-harness/idl-ts-client": "git+ssh://git@github.com/spark-harness/idl-ts-repo.git#semver:v0.2.4",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4"

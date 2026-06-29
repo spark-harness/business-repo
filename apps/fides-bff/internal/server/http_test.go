@@ -141,6 +141,7 @@ func TestHTTPServer_CORSPreflight_doesNotRequireIdempotencyKey(t *testing.T) {
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
 		newFakePricingService(),
 		newFakeOriginationService(),
+		newFakeIdentityProfileService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -162,6 +163,36 @@ func TestHTTPServer_CORSPreflight_doesNotRequireIdempotencyKey(t *testing.T) {
 	}
 }
 
+func TestHTTPServer_CORSPreflight_allowsIdentityProfilePut(t *testing.T) {
+	authClient := &fakeApplicantAuthClient{}
+	srv := NewHTTPServer(
+		&conf.Server{CORS: conf.CORS{AllowedOrigins: []string{"http://localhost:3001"}}},
+		service.NewHealthService(biz.NewHealthUsecase("test")),
+		service.NewAuthService(biz.NewAuthUsecase(authClient)),
+		newFakePricingService(),
+		newFakeOriginationService(),
+		newFakeIdentityProfileService(),
+		fakeTokenValidator{applicantID: "applicant_001"},
+		bffkit.NewMemoryIdempotencyStore(0),
+		log.DefaultLogger,
+	)
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/me/identity-profile", nil)
+	req.Header.Set("Origin", "http://localhost:3001")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPut)
+	req.Header.Set("Access-Control-Request-Headers", "authorization,content-type,idempotency-key")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	if !strings.Contains(rec.Header().Get("Access-Control-Allow-Methods"), http.MethodPut) {
+		t.Fatalf("allow methods = %q, want %s", rec.Header().Get("Access-Control-Allow-Methods"), http.MethodPut)
+	}
+}
+
 func newTestHTTPServer(health *service.HealthService) *khttp.Server {
 	authClient := &fakeApplicantAuthClient{}
 	auth := service.NewAuthService(biz.NewAuthUsecase(authClient))
@@ -172,6 +203,7 @@ func newTestHTTPServer(health *service.HealthService) *khttp.Server {
 		auth,
 		pricing,
 		newFakeOriginationService(),
+		newFakeIdentityProfileService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -574,6 +606,7 @@ func TestHTTPServer_AuthSendOtp_mapsRequestAndResponse(t *testing.T) {
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
 		newFakePricingService(),
 		newFakeOriginationService(),
+		newFakeIdentityProfileService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -615,6 +648,7 @@ func TestHTTPServer_AuthVerifyOtp_mapsExpiredError(t *testing.T) {
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
 		newFakePricingService(),
 		newFakeOriginationService(),
+		newFakeIdentityProfileService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -649,6 +683,7 @@ func TestHTTPServer_AuthSendOtp_mapsCooldownRetryAfter(t *testing.T) {
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
 		newFakePricingService(),
 		newFakeOriginationService(),
+		newFakeIdentityProfileService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -690,6 +725,7 @@ func TestHTTPServer_AuthSendOtp_mapsConsulNoHealthyInstance(t *testing.T) {
 		service.NewAuthService(biz.NewAuthUsecase(authClient)),
 		newFakePricingService(),
 		newFakeOriginationService(),
+		newFakeIdentityProfileService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -732,6 +768,103 @@ func TestHTTPServer_AuthSendOtp_requiresIdempotencyKey(t *testing.T) {
 	}
 	if body.Error.Field != bffkit.HeaderIdempotencyKey {
 		t.Fatalf("error field = %q, want %q", body.Error.Field, bffkit.HeaderIdempotencyKey)
+	}
+}
+
+func TestHTTPServer_IdentityProfilePut_savesProfileAndAdvancesStep(t *testing.T) {
+	applicant := &fakeApplicantProfileClient{
+		upsertProfile: biz.IdentityProfile{
+			HKIDBody:       "A123456",
+			HKIDCheckDigit: "3",
+			FirstName:      "Ada",
+			LastName:       "Lovelace",
+			ChineseName:    "Test Name",
+			Nationality:    "hong_kong",
+			DateOfBirth:    "1990-01-15",
+		},
+	}
+	draft := &fakeOriginationDraftClient{
+		result: biz.AdvanceApplicationStepResult{ApplicationID: "app_001", CurrentStep: "identity_information"},
+	}
+	identityProfile := service.NewIdentityProfileService(biz.NewIdentityProfileUsecase(applicant, draft))
+	srv := NewHTTPServer(
+		&conf.Server{},
+		service.NewHealthService(biz.NewHealthUsecase("test")),
+		service.NewAuthService(biz.NewAuthUsecase(&fakeApplicantAuthClient{})),
+		newFakePricingService(),
+		newFakeOriginationService(),
+		identityProfile,
+		fakeTokenValidator{applicantID: "applicant_001"},
+		bffkit.NewMemoryIdempotencyStore(0),
+		log.DefaultLogger,
+	)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/me/identity-profile", strings.NewReader(`{"applicationId":"app_001","profile":{"hkidBody":"A123456","hkidCheckDigit":"3","firstName":"Ada","lastName":"Lovelace","chineseName":"Test Name","nationality":2,"dateOfBirth":"1990-01-15"}}`))
+	req.Header.Set("Authorization", "Bearer valid")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(bffkit.HeaderIdempotencyKey, "idem-identity-profile")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if applicant.upsertCommand.ApplicantID != "applicant_001" || applicant.upsertCommand.ApplicationID != "app_001" {
+		t.Fatalf("upsert command = %#v", applicant.upsertCommand)
+	}
+	if applicant.upsertCommand.Profile.Nationality != "hong_kong" {
+		t.Fatalf("nationality = %q, want hong_kong", applicant.upsertCommand.Profile.Nationality)
+	}
+	if draft.command.ApplicantID != "applicant_001" || draft.command.ApplicationID != "app_001" {
+		t.Fatalf("advance command = %#v", draft.command)
+	}
+	var body struct {
+		CurrentStep string `json:"currentStep"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.CurrentStep != "identity_information" {
+		t.Fatalf("currentStep = %q, want identity_information", body.CurrentStep)
+	}
+}
+
+func TestHTTPServer_IdentityProfileGet_whenEmpty_shouldReturnEmptyResponse(t *testing.T) {
+	applicant := &fakeApplicantProfileClient{getResult: biz.GetIdentityProfileResult{Empty: true}}
+	identityProfile := service.NewIdentityProfileService(biz.NewIdentityProfileUsecase(applicant, &fakeOriginationDraftClient{}))
+	srv := NewHTTPServer(
+		&conf.Server{},
+		service.NewHealthService(biz.NewHealthUsecase("test")),
+		service.NewAuthService(biz.NewAuthUsecase(&fakeApplicantAuthClient{})),
+		newFakePricingService(),
+		newFakeOriginationService(),
+		identityProfile,
+		fakeTokenValidator{applicantID: "applicant_001"},
+		bffkit.NewMemoryIdempotencyStore(0),
+		log.DefaultLogger,
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/identity-profile?applicationId=app_001", nil)
+	req.Header.Set("Authorization", "Bearer valid")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if applicant.getCommand.ApplicantID != "applicant_001" || applicant.getCommand.ApplicationID != "app_001" {
+		t.Fatalf("get command = %#v", applicant.getCommand)
+	}
+	var body struct {
+		Empty bool `json:"empty"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if !body.Empty {
+		t.Fatalf("empty = false, want true")
 	}
 }
 
@@ -780,6 +913,13 @@ func newFakeOriginationService() *service.OriginationService {
 	return service.NewOriginationService(biz.NewOriginationUsecase(&fakeOriginationClient{}))
 }
 
+func newFakeIdentityProfileService() *service.IdentityProfileService {
+	return service.NewIdentityProfileService(biz.NewIdentityProfileUsecase(
+		&fakeApplicantProfileClient{},
+		&fakeOriginationDraftClient{},
+	))
+}
+
 func newTestHTTPServerWithPricing(quoteClient biz.QuoteClient, tokenValidator bffkit.TokenValidator) *khttp.Server {
 	authClient := &fakeApplicantAuthClient{}
 	auth := service.NewAuthService(biz.NewAuthUsecase(authClient))
@@ -791,6 +931,7 @@ func newTestHTTPServerWithPricing(quoteClient biz.QuoteClient, tokenValidator bf
 		auth,
 		pricing,
 		origination,
+		newFakeIdentityProfileService(),
 		tokenValidator,
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -808,6 +949,7 @@ func newTestHTTPServerWithOrigination(originationClient biz.OriginationClient, t
 		auth,
 		pricing,
 		origination,
+		newFakeIdentityProfileService(),
 		tokenValidator,
 		bffkit.NewMemoryIdempotencyStore(0),
 		log.DefaultLogger,
@@ -883,4 +1025,33 @@ func (f *fakeOriginationClient) PatchLoanApplication(_ context.Context, command 
 	f.calls++
 	f.patchCommand = command
 	return f.summary, f.err
+}
+
+type fakeApplicantProfileClient struct {
+	upsertCommand biz.UpsertIdentityProfileCommand
+	getCommand    biz.GetIdentityProfileCommand
+	upsertProfile biz.IdentityProfile
+	getResult     biz.GetIdentityProfileResult
+	err           error
+}
+
+func (f *fakeApplicantProfileClient) UpsertIdentityProfile(_ context.Context, command biz.UpsertIdentityProfileCommand) (biz.IdentityProfile, error) {
+	f.upsertCommand = command
+	return f.upsertProfile, f.err
+}
+
+func (f *fakeApplicantProfileClient) GetIdentityProfile(_ context.Context, command biz.GetIdentityProfileCommand) (biz.GetIdentityProfileResult, error) {
+	f.getCommand = command
+	return f.getResult, f.err
+}
+
+type fakeOriginationDraftClient struct {
+	command biz.AdvanceApplicationStepCommand
+	result  biz.AdvanceApplicationStepResult
+	err     error
+}
+
+func (f *fakeOriginationDraftClient) AdvanceApplicationStep(_ context.Context, command biz.AdvanceApplicationStepCommand) (biz.AdvanceApplicationStepResult, error) {
+	f.command = command
+	return f.result, f.err
 }

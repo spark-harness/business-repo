@@ -58,6 +58,17 @@ class JdbcLoanApplicationRepositoryTest {
     }
 
     @Test
+    void findById_whenCurrentStepIsIdentityInformation_shouldReadStoredStep() {
+        LoanApplication application = application("app_1", "100000.00", 12, "quote_1")
+                .advanceTo(ApplicationStep.IDENTITY_INFORMATION, Instant.parse("2026-06-28T02:00:00Z"));
+
+        applications.save(application);
+
+        assertThat(applications.findById("app_1")).hasValueSatisfying(stored ->
+                assertThat(stored.currentStep()).isEqualTo(ApplicationStep.IDENTITY_INFORMATION));
+    }
+
+    @Test
     void idempotencyRecord_roundTripsApplicationId() {
         idempotency.save("applicant_001", "create", "idem-1", "hash-1", "app_1");
 

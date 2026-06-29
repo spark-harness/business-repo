@@ -94,7 +94,7 @@ public class JdbcLoanApplicationRepository implements LoanApplicationRepository 
                 new LoanTerms(rs.getBigDecimal("amount"), rs.getInt("term_months"), rs.getString("purpose")),
                 quote,
                 ApplicationStatus.DRAFT,
-                ApplicationStep.LOAN_REQUEST,
+                ApplicationStep.fromValue(rs.getString("current_step")),
                 toInstant(rs, "created_at"),
                 toInstant(rs, "updated_at"));
     }
