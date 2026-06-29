@@ -38,9 +38,12 @@ func wireApp(confServer *conf.Server, applicant *conf.Applicant, quote *conf.Quo
 	originationClient := data.NewOriginationClient(origination)
 	originationUsecase := biz.NewOriginationUsecase(originationClient)
 	originationService := service.NewOriginationService(originationUsecase)
+	originationDraftClient := data.NewOriginationDraftClient(origination)
+	identityProfileUsecase := biz.NewIdentityProfileUsecase(applicantAuthClient, originationDraftClient)
+	identityProfileService := service.NewIdentityProfileService(identityProfileUsecase)
 	sessionTokenValidator := data.NewSessionTokenValidator(authConf)
 	idempotencyStore := newIdempotencyStore()
-	httpServer := server.NewHTTPServer(confServer, healthService, authService, pricingService, originationService, sessionTokenValidator, idempotencyStore, logger)
+	httpServer := server.NewHTTPServer(confServer, healthService, authService, pricingService, originationService, identityProfileService, sessionTokenValidator, idempotencyStore, logger)
 	mainRegistration, err := newConsulRegistration(registry)
 	if err != nil {
 		return nil, nil, err

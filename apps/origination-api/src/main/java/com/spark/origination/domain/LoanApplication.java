@@ -38,4 +38,17 @@ public record LoanApplication(
                 createdAt,
                 updatedAt);
     }
+
+    public LoanApplication advanceTo(ApplicationStep targetStep, Instant updatedAt) {
+        return new LoanApplication(
+                applicationId,
+                applicantId,
+                productCode,
+                loan,
+                acceptedQuote,
+                ApplicationStatus.DRAFT,
+                targetStep,
+                createdAt,
+                updatedAt);
+    }
 }

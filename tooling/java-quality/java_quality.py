@@ -6,6 +6,8 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,6 +17,7 @@ REPO_ROOT = TOOL_ROOT.parents[1]
 CONFIG_DIR = TOOL_ROOT / "config"
 PROJECTS_CONFIG = TOOL_ROOT / "projects.yaml"
 MAVEN_REPO_LOCAL = Path(os.environ.get("MAVEN_REPO_LOCAL", REPO_ROOT.parent / ".m2" / "repository"))
+MAVEN_ATTEMPTS = int(os.environ.get("JAVA_QUALITY_MAVEN_ATTEMPTS", "3"))
 
 
 @dataclass(frozen=True)
@@ -250,7 +253,27 @@ def project_is_selected(project_name: str, plan_path: Path | None) -> bool:
     return project_name in set(plan.get("selected", []))
 
 
-def maven_command(project_name: str, goal: str) -> list[str]:
+def github_package_token() -> str:
+    for name in ("IDL_JAVA_REPO_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+        token = os.environ.get(name, "").strip()
+        if token:
+            return token
+    return ""
+
+
+def write_maven_settings(token: str) -> Path:
+    handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, suffix="-maven-settings.xml")
+    with handle:
+        handle.write(
+            "<settings><servers><server><id>github</id>"
+            "<username>x-access-token</username>"
+            f"<password>{token}</password>"
+            "</server></servers></settings>"
+        )
+    return Path(handle.name)
+
+
+def maven_command(project_name: str, goal: str, settings_path: Path | None = None) -> list[str]:
     project = PROJECTS[project_name]
     base = [
         "mvn",
@@ -260,9 +283,53 @@ def maven_command(project_name: str, goal: str) -> list[str]:
         project.pom,
         f"-Djava.quality.config.dir={CONFIG_DIR}",
     ]
+    if settings_path is not None:
+        base[1:1] = ["-s", str(settings_path)]
     if goal == "install":
         return [*base, "spotless:check", "checkstyle:check", "test", "spotbugs:check", "install"]
     return [*base, "spotless:check", "checkstyle:check", "test", "spotbugs:check"]
+
+
+def transient_maven_failure(output: str) -> bool:
+    patterns = (
+        "Could not transfer artifact",
+        "Remote host terminated the handshake",
+        "Connection reset",
+        "Read timed out",
+        "Connection timed out",
+        "EOFException",
+        "502 Bad Gateway",
+        "503 Service Unavailable",
+        "504 Gateway Time-out",
+    )
+    return any(pattern in output for pattern in patterns)
+
+
+def run_maven(project_name: str, goal: str) -> int:
+    token = github_package_token()
+    settings_path = write_maven_settings(token) if token else None
+    attempts = max(1, MAVEN_ATTEMPTS)
+    try:
+        for attempt in range(1, attempts + 1):
+            result = subprocess.run(
+                maven_command(project_name, goal, settings_path),
+                cwd=REPO_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            print(result.stdout, end="")
+            if result.returncode == 0:
+                return 0
+            if attempt == attempts or not transient_maven_failure(result.stdout):
+                return result.returncode
+            print(f"JAVA_PROJECT_RETRY {project_name} attempt={attempt + 1}")
+            time.sleep(5)
+        return 1
+    finally:
+        if settings_path is not None:
+            settings_path.unlink(missing_ok=True)
 
 
 def run_project(project_name: str, plan_path: Path | None, skip_unselected: bool) -> int:
@@ -272,10 +339,10 @@ def run_project(project_name: str, plan_path: Path | None, skip_unselected: bool
 
     goal = "install" if project_name == "spring-starter" else "verify"
     print(f"JAVA_PROJECT_START {project_name}")
-    result = subprocess.run(maven_command(project_name, goal), cwd=REPO_ROOT, check=False)
-    if result.returncode != 0:
+    returncode = run_maven(project_name, goal)
+    if returncode != 0:
         print(f"JAVA_PROJECT_FAIL {project_name}")
-        return result.returncode
+        return returncode
     print(f"JAVA_PROJECT_PASS {project_name}")
     return 0
 

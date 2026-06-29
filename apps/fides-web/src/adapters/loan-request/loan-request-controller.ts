@@ -49,11 +49,12 @@ export function createLoanRequestController(
   gateway: LoanRequestGateway,
   store: DraftStore,
   createIdempotencyKey: () => string = defaultIdempotencyKey,
+  currentApplicantId: () => string | null = () => null,
 ): LoanRequestController {
   return {
     async load() {
       try {
-        const pointer = await store.loadDraftPointer();
+        const pointer = await loadUsableDraftPointer(store, currentApplicantId());
         if (!pointer) {
           return { ok: true, value: null };
         }
@@ -79,7 +80,8 @@ export function createLoanRequestController(
     async continue(input) {
       try {
         const loan = normalizeLoanRequest(input.loan);
-        const pointer = await store.loadDraftPointer();
+        const applicantId = currentApplicantId();
+        const pointer = await loadUsableDraftPointer(store, applicantId);
         const draft = pointer
           ? await gateway.patchDraft({
               applicationId: pointer.applicationId,
@@ -95,7 +97,7 @@ export function createLoanRequestController(
 
         await store.saveDraftPointer({
           applicationId: draft.applicationId,
-          applicantId: pointer?.applicantId,
+          applicantId: applicantId ?? pointer?.applicantId,
           currentStep: draft.currentStep,
         });
 
@@ -111,6 +113,21 @@ export function createLoanRequestController(
       }
     },
   };
+}
+
+async function loadUsableDraftPointer(store: DraftStore, applicantId: string | null) {
+  const pointer = await store.loadDraftPointer();
+  if (!pointer) {
+    return null;
+  }
+  if (pointer.applicantId && applicantId && pointer.applicantId === applicantId) {
+    return pointer;
+  }
+  if (!pointer.applicantId && !applicantId) {
+    return pointer;
+  }
+  await store.clearDraftPointer();
+  return null;
 }
 
 function normalizeLoanRequest(input: LoanRequestFormInput | LoanRequestInput): LoanRequestInput {

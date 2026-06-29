@@ -41,7 +41,7 @@ describe("LoanRequestController", () => {
   it("patches an existing draft on Continue", async () => {
     const gateway = createGateway();
     const store = createStore({ applicationId: "app_1", applicantId: "applicant_1", currentStep: "loan_request" });
-    const controller = createLoanRequestController(gateway, store, () => "idem-1");
+    const controller = createLoanRequestController(gateway, store, () => "idem-1", () => "applicant_1");
 
     await controller.continue({
       loan: { amount: "50000.00", term: 9, purpose: "debt_consolidation" },
@@ -56,11 +56,36 @@ describe("LoanRequestController", () => {
     });
   });
 
+  it("creates a new draft when the stored draft belongs to another applicant", async () => {
+    const gateway = createGateway();
+    const store = createStore({ applicationId: "app_old", applicantId: "applicant_old", currentStep: "loan_request" });
+    const controller = createLoanRequestController(gateway, store, () => "idem-1", () => "applicant_new");
+
+    await controller.continue({
+      loan: { amount: "50000.00", term: 9, purpose: "debt_consolidation" },
+      quoteId: "quote_1",
+    });
+
+    expect(gateway.patchDraft).not.toHaveBeenCalled();
+    expect(gateway.createDraft).toHaveBeenCalledWith({
+      loan: { amount: "50000.00", term: 9, purpose: "debt_consolidation" },
+      quoteId: "quote_1",
+      idempotencyKey: "idem-1",
+    });
+    expect(store.clearDraftPointer).toHaveBeenCalled();
+    expect(store.saveDraftPointer).toHaveBeenCalledWith({
+      applicationId: "app_1",
+      applicantId: "applicant_new",
+      currentStep: "loan_request",
+    });
+  });
+
   it("loads an existing draft as a refill view model", async () => {
     const controller = createLoanRequestController(
       createGateway(),
       createStore({ applicationId: "app_1", applicantId: "applicant_1", currentStep: "loan_request" }),
       () => "idem-1",
+      () => "applicant_1",
     );
 
     await expect(controller.load()).resolves.toMatchObject({
@@ -73,6 +98,17 @@ describe("LoanRequestController", () => {
         quote: { quoteId: "quote_2", monthly: "6520.10" },
       },
     });
+  });
+
+  it("does not load a stored draft owned by another applicant", async () => {
+    const gateway = createGateway();
+    const store = createStore({ applicationId: "app_old", applicantId: "applicant_old", currentStep: "loan_request" });
+    const controller = createLoanRequestController(gateway, store, () => "idem-1", () => "applicant_new");
+
+    await expect(controller.load()).resolves.toEqual({ ok: true, value: null });
+
+    expect(gateway.getDraft).not.toHaveBeenCalled();
+    expect(store.clearDraftPointer).toHaveBeenCalled();
   });
 });
 

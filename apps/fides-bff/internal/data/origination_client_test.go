@@ -139,6 +139,30 @@ func TestOriginationConsulResolver_ResolveReturnsHTTPServiceURL(t *testing.T) {
 	}
 }
 
+func TestOriginationGRPCConsulResolver_ResolvePrefersGrpcPortMetadata(t *testing.T) {
+	consul := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/health/service/origination-api" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		if r.URL.Query().Get("passing") != "true" {
+			t.Fatalf("passing = %q", r.URL.Query().Get("passing"))
+		}
+		_, _ = w.Write([]byte(`[{"Node":{"Address":"10.0.0.10"},"Service":{"Address":"origination-api.lendora-sta-origination-api.svc.cluster.local","Port":80,"Meta":{"grpc_port":"9001"}}}]`))
+	}))
+	defer consul.Close()
+
+	resolver := NewOriginationGRPCConsulResolver(&conf.Origination{Consul: originationConsulFromURL(consul.URL)})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	target, err := resolver.Resolve(ctx)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if target != "origination-api.lendora-sta-origination-api.svc.cluster.local:9001" {
+		t.Fatalf("target = %q", target)
+	}
+}
+
 func originationConsulFromURL(raw string) conf.Consul {
 	consul := consulFromURL(raw)
 	consul.ServiceName = "origination-api"

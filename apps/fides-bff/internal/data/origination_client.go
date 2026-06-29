@@ -237,7 +237,27 @@ func NewOriginationConsulResolver(c *conf.Origination) *OriginationConsulResolve
 	}
 }
 
+func NewOriginationGRPCConsulResolver(c *conf.Origination) *OriginationGRPCConsulResolver {
+	consul := conf.Consul{}
+	if c != nil {
+		consul = c.Consul
+	}
+	scheme := firstNonEmpty(consul.Scheme, "http")
+	address := firstNonEmpty(consul.Address, "127.0.0.1:8500")
+	return &OriginationGRPCConsulResolver{
+		baseURL:     scheme + "://" + address,
+		serviceName: firstNonEmpty(consul.ServiceName, "origination-api"),
+		client:      &http.Client{Timeout: 2 * time.Second},
+	}
+}
+
 type OriginationConsulResolver struct {
+	baseURL     string
+	serviceName string
+	client      *http.Client
+}
+
+type OriginationGRPCConsulResolver struct {
 	baseURL     string
 	serviceName string
 	client      *http.Client
@@ -276,6 +296,41 @@ func (r *OriginationConsulResolver) Resolve(ctx context.Context) (string, error)
 		return "http://" + net.JoinHostPort(address, strconv.Itoa(port)), nil
 	}
 	return "", errors.New("no healthy origination-api instance")
+}
+
+func (r *OriginationGRPCConsulResolver) Resolve(ctx context.Context) (string, error) {
+	if r == nil {
+		return "", errors.New("origination grpc consul resolver is not configured")
+	}
+	endpoint, err := url.JoinPath(r.baseURL, "/v1/health/service", r.serviceName)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?passing=true", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("consul health status %d", resp.StatusCode)
+	}
+	var entries []consulHealthEntry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		address := firstNonEmpty(entry.Service.Address, entry.Node.Address)
+		port := entry.Service.grpcPort()
+		if address == "" || port == 0 {
+			continue
+		}
+		return net.JoinHostPort(address, strconv.Itoa(port)), nil
+	}
+	return "", errors.New("no healthy origination-api grpc instance")
 }
 
 func originationErrorFromHTTP(resp *http.Response) *biz.OriginationError {

@@ -69,3 +69,5 @@ spark:
   grpc:
     server:
       port: 9090
+      principal:
+        enabled: false

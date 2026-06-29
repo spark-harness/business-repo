@@ -1,4 +1,4 @@
-import { FidesApplication } from "@/api/fides-application";
+import { FidesApplicationClient } from "@/api/fides-application-client";
 import { ObservabilityBootstrap } from "@/api/observability-bootstrap";
 import { getPublicRuntimeConfig } from "@/api/runtime-config/get-public-runtime-config";
 
@@ -10,7 +10,7 @@ export default async function Home() {
   return (
     <>
       <ObservabilityBootstrap config={runtimeConfig} />
-      <FidesApplication runtimeConfig={runtimeConfig} />
+      <FidesApplicationClient runtimeConfig={runtimeConfig} />
     </>
   );
 }

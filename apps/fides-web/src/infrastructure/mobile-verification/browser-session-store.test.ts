@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { BrowserSessionStore } from "./browser-session-store";
 
 describe("BrowserSessionStore", () => {
-  it("keeps access token in memory and stores only non-sensitive session pointer", async () => {
+  it("persists the short-lived access token for same-tab refreshes", async () => {
     const storage = new MemoryStorage();
     const store = new BrowserSessionStore(storage);
 
@@ -16,9 +16,14 @@ describe("BrowserSessionStore", () => {
     });
 
     expect(store.getAccessTokenForRequest()).toBe("access-token");
-    expect(storage.dump()).not.toContain("access-token");
+    expect(store.getApplicantIdForRequest()).toBe("applicant-1");
     expect(storage.dump()).not.toContain("refresh-token");
     expect(storage.dump()).toContain("applicant-1");
+
+    const reloaded = new BrowserSessionStore(storage);
+
+    expect(reloaded.getAccessTokenForRequest()).toBe("access-token");
+    expect(reloaded.getApplicantIdForRequest()).toBe("applicant-1");
   });
 
   it("does not persist phone-shaped mock applicant identifiers", async () => {
@@ -32,6 +37,24 @@ describe("BrowserSessionStore", () => {
     });
 
     expect(storage.dump()).not.toContain("91234567");
+  });
+
+  it("clears expired stored sessions", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+      "fides.mobileVerification.sessionPointer",
+      JSON.stringify({
+        applicantId: "applicant-1",
+        accessToken: "expired-token",
+        expiresAt: Date.now() - 1,
+      }),
+    );
+
+    const store = new BrowserSessionStore(storage);
+
+    expect(store.getAccessTokenForRequest()).toBeNull();
+    expect(store.getApplicantIdForRequest()).toBeNull();
+    expect(storage.dump()).not.toContain("expired-token");
   });
 });
 

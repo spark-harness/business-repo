@@ -1,6 +1,9 @@
 package com.spark.applicant.bootstrap;
 
 import com.spark.applicant.application.auth.AuthPolicy;
+import com.spark.applicant.application.profile.GetIdentityProfileUseCase;
+import com.spark.applicant.application.profile.IdentityProfileRepository;
+import com.spark.applicant.application.profile.UpsertIdentityProfileUseCase;
 import com.zaxxer.hikari.HikariDataSource;
 import javax.sql.DataSource;
 import java.time.Clock;
@@ -29,6 +32,17 @@ public class ApplicantAuthConfiguration {
     @Bean
     Clock clock() {
         return Clock.systemUTC();
+    }
+
+    @Bean
+    UpsertIdentityProfileUseCase upsertIdentityProfileUseCase(
+            IdentityProfileRepository repository, Clock clock) {
+        return new UpsertIdentityProfileUseCase(repository, clock);
+    }
+
+    @Bean
+    GetIdentityProfileUseCase getIdentityProfileUseCase(IdentityProfileRepository repository) {
+        return new GetIdentityProfileUseCase(repository);
     }
 
     @Bean

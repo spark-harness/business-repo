@@ -22,6 +22,8 @@ import (
 	"github.com/spark/fides-bff/internal/conf"
 )
 
+var grpcNewClient = grpc.NewClient
+
 var errNoHealthyApplicant = errors.New("no healthy applicant-api instance")
 
 var applicantTracer = otel.Tracer("github.com/spark/fides-bff/internal/data")
@@ -141,7 +143,7 @@ func (c *ApplicantAuthClient) client(ctx context.Context) (applicantv1pb.Applica
 	if err != nil {
 		return nil, func() {}, unavailable()
 	}
-	conn, err := grpc.NewClient(target, c.dialOptions...)
+	conn, err := grpcNewClient(target, c.dialOptions...)
 	if err != nil {
 		return nil, func() {}, unavailable()
 	}

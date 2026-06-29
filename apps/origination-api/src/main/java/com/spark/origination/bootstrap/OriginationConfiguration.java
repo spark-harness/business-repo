@@ -1,6 +1,7 @@
 package com.spark.origination.bootstrap;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.spark.origination.application.AdvanceApplicationStepUseCase;
 import com.spark.origination.application.CreateLoanApplicationUseCase;
 import com.spark.origination.application.GetLoanApplicationUseCase;
 import com.spark.origination.application.IdempotencyRepository;
@@ -60,6 +61,12 @@ public class OriginationConfiguration {
     @Bean
     GetLoanApplicationUseCase getLoanApplicationUseCase(LoanApplicationRepository applications) {
         return new GetLoanApplicationUseCase(applications);
+    }
+
+    @Bean
+    AdvanceApplicationStepUseCase advanceApplicationStepUseCase(
+            LoanApplicationRepository applications, Clock clock) {
+        return new AdvanceApplicationStepUseCase(applications, clock);
     }
 
     @Bean

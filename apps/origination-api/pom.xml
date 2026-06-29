@@ -17,6 +17,8 @@
     <spring-boot.version>3.5.14</spring-boot.version>
     <postgresql.version>42.7.11</postgresql.version>
     <spark.common.version>0.1.0-SNAPSHOT</spark.common.version>
+    <spark.contract.version>0.2.4</spark.contract.version>
+    <grpc-java.version>1.81.0</grpc-java.version>
     <java.quality.config.dir>${project.basedir}/../../tooling/java-quality/config</java.quality.config.dir>
   </properties>
 
@@ -31,6 +33,20 @@
       </dependency>
     </dependencies>
   </dependencyManagement>
+
+  <repositories>
+    <repository>
+      <id>github</id>
+      <name>GitHub Packages</name>
+      <url>https://maven.pkg.github.com/spark-harness/idl-java-repo</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
 
   <dependencies>
     <dependency>
@@ -63,6 +79,11 @@
       <version>${spark.common.version}</version>
     </dependency>
     <dependency>
+      <groupId>com.spark.contract</groupId>
+      <artifactId>spark-idl-java</artifactId>
+      <version>${spark.contract.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
       <version>${postgresql.version}</version>
@@ -75,6 +96,12 @@
     <dependency>
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-inprocess</artifactId>
+      <version>${grpc-java.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

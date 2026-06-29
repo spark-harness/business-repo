@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -22,7 +23,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-@SpringBootTest(classes = OriginationApiApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        classes = OriginationApiApplication.class,
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "spark.grpc.server.enabled=false")
 class LoanApplicationHttpAdapterTest {
     private static HttpServer quoteServer;
 
@@ -173,9 +177,9 @@ class LoanApplicationHttpAdapterTest {
                   "apr": "0.0520",
                   "totalInterest": "2729.00",
                   "totalPayable": "102729.00",
-                  "validUntil": "2026-06-28T23:59:00Z"
+                  "validUntil": "%s"
                 }
-                """.formatted(quoteId, amount, term);
+                """.formatted(quoteId, amount, term, Instant.now().plusSeconds(3600));
     }
 
     private static void respond(com.sun.net.httpserver.HttpExchange exchange, int status, String body) throws IOException {
