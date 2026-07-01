@@ -15,9 +15,12 @@
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <spring-boot.version>3.5.14</spring-boot.version>
+    <spring-cloud.version>2025.0.0</spring-cloud.version>
     <jackson-bom.version>2.21.4</jackson-bom.version>
     <postgresql.version>42.7.11</postgresql.version>
     <tomcat.version>10.1.55</tomcat.version>
+    <opentelemetry.version>1.60.1</opentelemetry.version>
+    <opentelemetry.instrumentation.version>2.26.0</opentelemetry.instrumentation.version>
     <spark.common.version>0.1.0-SNAPSHOT</spark.common.version>
     <java.quality.config.dir>${project.basedir}/../../tooling/java-quality/config</java.quality.config.dir>
   </properties>
@@ -37,9 +40,23 @@
         <version>${tomcat.version}</version>
       </dependency>
       <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-bom</artifactId>
+        <version>${opentelemetry.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-dependencies</artifactId>
         <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-dependencies</artifactId>
+        <version>${spring-cloud.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -54,6 +71,10 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-consul-config</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework</groupId>
@@ -80,6 +101,11 @@
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
       <version>${postgresql.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.opentelemetry.instrumentation</groupId>
+      <artifactId>opentelemetry-spring-boot-starter</artifactId>
+      <version>${opentelemetry.instrumentation.version}</version>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
