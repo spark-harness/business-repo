@@ -67,6 +67,7 @@ export function buildPublicRuntimeConfig(config: RuntimeConfig): PublicRuntimeCo
     bffBaseUrl: config.bffBaseUrl,
     browserTracing: {
       endpoint: config.browserTracing.endpoint,
+      environment: config.environment,
       headers: { ...config.browserTracing.headers },
     },
   };

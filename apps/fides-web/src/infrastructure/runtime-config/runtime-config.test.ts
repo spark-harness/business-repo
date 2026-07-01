@@ -74,6 +74,7 @@ describe("runtime config", () => {
       bffBaseUrl: "/api/v1",
       browserTracing: {
         endpoint: "https://otel.example/v1/traces",
+        environment: "prod",
         headers: { "x-public": "1" },
       },
     });
