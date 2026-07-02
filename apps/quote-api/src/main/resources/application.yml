@@ -22,7 +22,7 @@ spring:
 management:
   health:
     db:
-      enabled: true
+      enabled: false
 
 otel:
   service:

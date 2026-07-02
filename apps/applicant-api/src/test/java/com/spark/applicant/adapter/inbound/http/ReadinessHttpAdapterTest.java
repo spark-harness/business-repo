@@ -31,7 +31,7 @@ class ReadinessHttpAdapterTest {
         mockMvc.perform(get("/ready"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("READY"))
-                .andExpect(jsonPath("$.dependencies.postgresql").value("UP"))
+                .andExpect(jsonPath("$.dependencies.postgresql").doesNotExist())
                 .andExpect(jsonPath("$.dependencies.redis").value("UP"))
                 .andExpect(jsonPath("$.dependencies.consul").value("UP"));
     }
@@ -51,11 +51,6 @@ class ReadinessHttpAdapterTest {
 
     static class ProbeConfiguration {
         private static boolean redisUp = true;
-
-        @Bean
-        RuntimeDependencyProbe postgresqlProbe() {
-            return () -> RuntimeDependencyProbe.Status.up("postgresql");
-        }
 
         @Bean
         RuntimeDependencyProbe redisProbe() {
