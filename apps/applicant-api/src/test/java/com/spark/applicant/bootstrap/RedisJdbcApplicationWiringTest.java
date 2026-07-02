@@ -39,7 +39,8 @@ class RedisJdbcApplicationWiringTest {
         assertThat(otpChallengeRepository).isInstanceOf(RedisOtpChallengeRepository.class);
         assertThat(runtimeDependencyProbes)
                 .extracting(probe -> probe.getClass().getSimpleName())
-                .contains("JdbcRuntimeDependencyProbe", "RedisRuntimeDependencyProbe");
+                .contains("RedisRuntimeDependencyProbe")
+                .doesNotContain("JdbcRuntimeDependencyProbe");
         Integer migrationCount = jdbcTemplate.queryForObject(
                 """
                 select count(*)

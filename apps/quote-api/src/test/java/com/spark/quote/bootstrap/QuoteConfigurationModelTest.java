@@ -40,6 +40,13 @@ class QuoteConfigurationModelTest {
     }
 
     @Test
+    void applicationYaml_whenLoaded_shouldDisableActuatorDatabaseHealthProbe() throws IOException {
+        String applicationYaml = resourceText("application.yml");
+
+        assertThat(applicationYaml).contains("management:\n  health:\n    db:\n      enabled: false");
+    }
+
+    @Test
     void pom_whenLoaded_shouldUseConsulConfigAndOpenTelemetryStarter() throws IOException {
         String pom = Files.readString(Path.of("pom.xml"), StandardCharsets.UTF_8);
 

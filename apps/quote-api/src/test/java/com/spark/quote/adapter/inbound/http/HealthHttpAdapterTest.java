@@ -12,13 +12,12 @@ import org.springframework.http.ResponseEntity;
 class HealthHttpAdapterTest {
     @Test
     void ready_whenDependencyIsDown_returnsServiceUnavailable() {
-        HealthHttpAdapter adapter = new HealthHttpAdapter(
-                List.of(() -> RuntimeDependencyProbe.Status.down("postgresql")));
+        HealthHttpAdapter adapter = new HealthHttpAdapter(List.of(() -> RuntimeDependencyProbe.Status.down("consul")));
 
         ResponseEntity<Map<String, Object>> response = adapter.ready();
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
         assertThat(response.getBody()).containsEntry("status", "NOT_READY");
-        assertThat(response.getBody()).containsEntry("dependencies", Map.of("postgresql", "DOWN"));
+        assertThat(response.getBody()).containsEntry("dependencies", Map.of("consul", "DOWN"));
     }
 }

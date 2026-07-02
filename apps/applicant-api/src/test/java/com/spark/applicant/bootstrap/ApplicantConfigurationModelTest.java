@@ -34,6 +34,13 @@ class ApplicantConfigurationModelTest {
     }
 
     @Test
+    void applicationYaml_whenLoaded_shouldDisableActuatorDatabaseHealthProbe() throws IOException {
+        String applicationYaml = resourceText("application.yml");
+
+        assertThat(applicationYaml).contains("management:\n  health:\n    db:\n      enabled: false");
+    }
+
+    @Test
     void applicationYaml_whenLoaded_shouldNotDeclareShortApplicantEnvAliases() throws IOException {
         String applicationYaml = resourceText("application.yml");
         String staYaml = resourceText("application-sta.yml");

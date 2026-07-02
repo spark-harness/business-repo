@@ -13,6 +13,8 @@ spring:
 
 management:
   health:
+    db:
+      enabled: false
     redis:
       enabled: true
 
