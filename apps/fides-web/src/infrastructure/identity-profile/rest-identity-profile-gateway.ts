@@ -4,10 +4,14 @@ import type {
   SaveIdentityProfileResult,
 } from "@/application/identity-profile/identity-profile-gateway";
 import type { IdentityProfile } from "@/domain/identity-profile/identity-profile";
-import { activeContext } from "@/infrastructure/observability/browser-tracing";
-import { context, trace } from "@opentelemetry/api";
-import type { Context } from "@opentelemetry/api";
-import { W3CTraceContextPropagator } from "@opentelemetry/core";
+import {
+  defaultFetch,
+  generatedClientBasePath,
+  readBffErrorEnvelope,
+  requestInitWithHeaders,
+  timeoutFetch,
+  type Fetcher,
+} from "@/infrastructure/bff/generated-client";
 import {
   Configuration,
   type FidesBffIdentityProfile,
@@ -17,7 +21,6 @@ import {
   ResponseError,
 } from "@spark-harness/idl-ts-client/vesta/lendora/fides-bff/v1";
 
-type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type FidesBffIdentityProfileApiFactory = (
   configuration: Configuration,
 ) => FidesBffIdentityProfileServiceApi;
@@ -105,35 +108,9 @@ export class RestIdentityProfileGateway implements IdentityProfileGateway {
     }
     return {
       Authorization: `Bearer ${token}`,
-      ...this.traceHeaders(idempotencyKey),
+      ...baseHeaders(idempotencyKey),
     };
   }
-
-  private traceHeaders(idempotencyKey: string): Record<string, string> {
-    try {
-      const baseContext = activeContext();
-      const tracer = trace.getTracer("fides.identity-profile");
-      const span = tracer.startSpan("fides-bff identity profile request");
-      const requestContext = trace.setSpan(baseContext, span);
-      return context.with(requestContext, () => {
-        try {
-          return traceHeaders(idempotencyKey, requestContext);
-        } finally {
-          span.end();
-        }
-      });
-    } catch {
-      return baseHeaders(idempotencyKey);
-    }
-  }
-}
-
-function defaultFetch(input: RequestInfo | URL, init?: RequestInit) {
-  return fetch(input, init);
-}
-
-function generatedClientBasePath(baseUrl: string): string {
-  return baseUrl.replace(/\/api\/v1\/?$/, "");
 }
 
 function toGeneratedProfile(profile: IdentityProfile): FidesBffIdentityProfile {
@@ -245,83 +222,20 @@ function incompleteBffResponse() {
   return { code: "system_error", field: "form", message: "Incomplete BFF response" };
 }
 
-function requestInitWithHeaders(init: RequestInit, headers: Record<string, string>): RequestInit {
-  const nextInit: RequestInit = {
-    ...init,
-    headers: {
-      ...(init.headers as Record<string, string> | undefined),
-      ...headers,
-    },
-  };
-  if (nextInit.credentials === undefined) {
-    delete nextInit.credentials;
-  }
-  return nextInit;
-}
-
-function timeoutFetch(fetcher: Fetcher, timeoutMs: number): Fetcher {
-  return async (input, init) => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      return await fetcher(input, {
-        ...init,
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-  };
-}
-
-function traceHeaders(idempotencyKey: string, requestContext: Context): Record<string, string> {
-  const headers = baseHeaders(idempotencyKey);
-  try {
-    new W3CTraceContextPropagator().inject(requestContext, headers, {
-      set(carrier, key, value) {
-        carrier[key] = value;
-      },
-    });
-  } catch {
-    return headers;
-  }
-  const traceId = trace.getSpanContext(requestContext)?.traceId;
-  if (traceId && traceId !== "00000000000000000000000000000000") {
-    headers["X-Trace-Id"] = traceId;
-    return headers;
-  }
-  const fallbackTraceId = randomHex(16);
-  headers.traceparent = `00-${fallbackTraceId}-${randomHex(8)}-01`;
-  headers["X-Trace-Id"] = fallbackTraceId;
-  return headers;
-}
-
 function baseHeaders(idempotencyKey: string): Record<string, string> {
   return idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {};
 }
 
-function randomHex(byteLength: number): string {
-  const bytes = new Uint8Array(byteLength);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 async function normalizeError(response: Response) {
-  try {
-    const payload = (await response.json()) as unknown;
-    if (payload && typeof payload === "object" && "error" in payload) {
-      const error = (payload as { error?: Record<string, unknown> }).error;
-      const code = typeof error?.code === "string" ? error.code : "unknown";
-      return {
-        code,
-        field: toField(code),
-        message: typeof error?.message === "string" ? error.message : "Request failed. Please try again.",
-      };
-    }
-  } catch {
+  const envelope = await readBffErrorEnvelope(response);
+  if (envelope.code === "unknown") {
     return statusError(response.status);
   }
-  return statusError(response.status);
+  return {
+    code: envelope.code,
+    field: toField(envelope.code),
+    message: envelope.message ?? "Request failed. Please try again.",
+  };
 }
 
 function statusError(status: number) {
