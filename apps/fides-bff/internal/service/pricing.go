@@ -1,13 +1,12 @@
 package service
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	nethttp "net/http"
 
-	khttp "github.com/go-kratos/kratos/v2/transport/http"
+	fidesbffv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/fides-bff/v1"
 	"github.com/spark/bffkit"
 
 	"github.com/spark/fides-bff/internal/biz"
@@ -21,72 +20,63 @@ func NewPricingService(uc *biz.PricingUsecase) *PricingService {
 	return &PricingService{uc: uc}
 }
 
-func (s *PricingService) CreateQuote(ctx khttp.Context) error {
-	principal, ok := bffkit.PrincipalFromContext(ctx.Request().Context())
+func (s *PricingService) CreateQuote(ctx context.Context, req *fidesbffv1pb.FidesBffPricingServiceCreateQuoteRequest) (*fidesbffv1pb.FidesBffPricingServiceCreateQuoteResponse, error) {
+	principal, ok := bffkit.PrincipalFromContext(ctx)
 	if !ok {
-		return bffkit.UnauthorizedError()
+		return nil, bffkit.UnauthorizedError()
 	}
-	body, err := decodeCreateQuoteRequest(ctx.Request())
+	headers := requestHeaders(ctx)
+	raw, err := marshalCreateQuoteRequest(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	result, err := s.uc.CreateQuote(ctx.Request().Context(), biz.CreateQuoteCommand{
+	result, err := s.uc.CreateQuote(ctx, biz.CreateQuoteCommand{
 		ApplicantID: principal.ApplicantID,
-		ProductCode: body.ProductCode,
-		Amount:      body.Amount,
-		Term:        body.Term,
-		Purpose:     body.Purpose,
-		TraceParent: ctx.Request().Header.Get(bffkit.HeaderTraceParent),
-		TraceState:  ctx.Request().Header.Get(bffkit.HeaderTraceState),
-		RawRequest:  body.Raw,
+		ProductCode: req.GetProductCode(),
+		Amount:      json.RawMessage(quoteAmountRaw(req.GetAmount())),
+		Term:        int(req.GetTerm()),
+		Purpose:     req.GetPurpose(),
+		TraceParent: headers.Get(bffkit.HeaderTraceParent),
+		TraceState:  headers.Get(bffkit.HeaderTraceState),
+		RawRequest:  raw,
 	})
 	if err != nil {
-		return pricingHTTPError(err)
+		return nil, pricingHTTPError(err)
 	}
-	return ctx.JSON(nethttp.StatusOK, createQuoteResponse{
-		QuoteID:       result.QuoteID,
+	return &fidesbffv1pb.FidesBffPricingServiceCreateQuoteResponse{
+		QuoteId:       result.QuoteID,
 		Monthly:       result.Monthly,
-		APR:           result.APR,
+		Apr:           result.APR,
 		TotalInterest: result.TotalInterest,
 		TotalPayable:  result.TotalPayable,
 		ValidUntil:    result.ValidUntil,
+	}, nil
+}
+
+func marshalCreateQuoteRequest(req *fidesbffv1pb.FidesBffPricingServiceCreateQuoteRequest) (json.RawMessage, error) {
+	raw, err := json.Marshal(struct {
+		ProductCode string `json:"productCode"`
+		Amount      string `json:"amount"`
+		Term        int32  `json:"term"`
+		Purpose     string `json:"purpose"`
+	}{
+		ProductCode: req.GetProductCode(),
+		Amount:      req.GetAmount(),
+		Term:        req.GetTerm(),
+		Purpose:     req.GetPurpose(),
 	})
-}
-
-type createQuoteRequest struct {
-	ProductCode string          `json:"productCode"`
-	Amount      json.RawMessage `json:"amount"`
-	Term        int             `json:"term"`
-	Purpose     string          `json:"purpose"`
-	Raw         json.RawMessage
-}
-
-type createQuoteResponse struct {
-	QuoteID       string `json:"quoteId"`
-	Monthly       string `json:"monthly"`
-	APR           string `json:"apr"`
-	TotalInterest string `json:"totalInterest"`
-	TotalPayable  string `json:"totalPayable"`
-	ValidUntil    string `json:"validUntil"`
-}
-
-func decodeCreateQuoteRequest(r *nethttp.Request) (createQuoteRequest, error) {
-	data, err := io.ReadAll(r.Body)
 	if err != nil {
-		return createQuoteRequest{}, bffkit.ValidationError([]bffkit.FieldError{{Field: "", Message: "invalid JSON request body"}})
+		return nil, err
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	var parsed any
-	if err := decoder.Decode(&parsed); err != nil {
-		return createQuoteRequest{}, bffkit.ValidationError([]bffkit.FieldError{{Field: "", Message: "invalid JSON request body"}})
+	return raw, nil
+}
+
+func quoteAmountRaw(amount string) []byte {
+	raw, err := json.Marshal(amount)
+	if err != nil {
+		return []byte(`""`)
 	}
-	var body createQuoteRequest
-	if err := json.Unmarshal(data, &body); err != nil {
-		return createQuoteRequest{}, bffkit.ValidationError([]bffkit.FieldError{{Field: "", Message: "invalid JSON request body"}})
-	}
-	body.Raw = append(json.RawMessage(nil), data...)
-	return body, nil
+	return raw
 }
 
 func pricingHTTPError(err error) error {

@@ -11,7 +11,9 @@ import (
 
 	"github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
+	"github.com/go-kratos/kratos/v2/transport"
 	khttp "github.com/go-kratos/kratos/v2/transport/http"
+	fidesbffv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/fides-bff/v1"
 	"github.com/spark/bffkit"
 
 	"github.com/spark/fides-bff/internal/biz"
@@ -343,6 +345,9 @@ func TestHTTPServer_PricingQuote_callsQuoteAPIWithPrincipalAndTrace(t *testing.T
 	if quoteClient.command.TraceState != "vendor=state" {
 		t.Fatalf("tracestate = %q, want vendor=state", quoteClient.command.TraceState)
 	}
+	if quoteClient.operation != fidesbffv1pb.OperationFidesBffPricingServiceCreateQuote {
+		t.Fatalf("operation = %q, want %q", quoteClient.operation, fidesbffv1pb.OperationFidesBffPricingServiceCreateQuote)
+	}
 	var body struct {
 		QuoteID       string `json:"quoteId"`
 		Monthly       string `json:"monthly"`
@@ -464,6 +469,9 @@ func TestHTTPServer_LoanApplicationCreate_callsOriginationWithPrincipalTraceAndI
 	if originationClient.createCommand.TraceState != "vendor=state" {
 		t.Fatalf("tracestate = %q, want vendor=state", originationClient.createCommand.TraceState)
 	}
+	if originationClient.createOperation != fidesbffv1pb.OperationFidesBffLoanApplicationServiceCreateLoanApplication {
+		t.Fatalf("operation = %q, want %q", originationClient.createOperation, fidesbffv1pb.OperationFidesBffLoanApplicationServiceCreateLoanApplication)
+	}
 	var body struct {
 		ApplicationID string `json:"applicationId"`
 		Status        string `json:"status"`
@@ -507,6 +515,9 @@ func TestHTTPServer_LoanApplicationGet_returnsDetail(t *testing.T) {
 	}
 	if originationClient.getCommand.ApplicationID != "app_123" {
 		t.Fatalf("applicationId = %q, want app_123", originationClient.getCommand.ApplicationID)
+	}
+	if originationClient.getOperation != fidesbffv1pb.OperationFidesBffLoanApplicationServiceGetLoanApplication {
+		t.Fatalf("operation = %q, want %q", originationClient.getOperation, fidesbffv1pb.OperationFidesBffLoanApplicationServiceGetLoanApplication)
 	}
 	var body struct {
 		ApplicationID string `json:"applicationId"`
@@ -555,6 +566,9 @@ func TestHTTPServer_LoanApplicationPatch_propagatesIdempotency(t *testing.T) {
 	}
 	if originationClient.patchCommand.IdempotencyKey != "idem-patch" {
 		t.Fatalf("idempotency key = %q, want idem-patch", originationClient.patchCommand.IdempotencyKey)
+	}
+	if originationClient.patchOperation != fidesbffv1pb.OperationFidesBffLoanApplicationServiceUpdateLoanApplication {
+		t.Fatalf("operation = %q, want %q", originationClient.patchOperation, fidesbffv1pb.OperationFidesBffLoanApplicationServiceUpdateLoanApplication)
 	}
 }
 
@@ -816,6 +830,9 @@ func TestHTTPServer_IdentityProfilePut_savesProfileAndAdvancesStep(t *testing.T)
 	if applicant.upsertCommand.Profile.Nationality != "hong_kong" {
 		t.Fatalf("nationality = %q, want hong_kong", applicant.upsertCommand.Profile.Nationality)
 	}
+	if applicant.upsertOperation != fidesbffv1pb.OperationFidesBffIdentityProfileServiceUpsertIdentityProfile {
+		t.Fatalf("operation = %q, want %q", applicant.upsertOperation, fidesbffv1pb.OperationFidesBffIdentityProfileServiceUpsertIdentityProfile)
+	}
 	if draft.command.ApplicantID != "applicant_001" || draft.command.ApplicationID != "app_001" {
 		t.Fatalf("advance command = %#v", draft.command)
 	}
@@ -856,6 +873,9 @@ func TestHTTPServer_IdentityProfileGet_whenEmpty_shouldReturnEmptyResponse(t *te
 	}
 	if applicant.getCommand.ApplicantID != "applicant_001" || applicant.getCommand.ApplicationID != "app_001" {
 		t.Fatalf("get command = %#v", applicant.getCommand)
+	}
+	if applicant.getOperation != fidesbffv1pb.OperationFidesBffIdentityProfileServiceGetIdentityProfile {
+		t.Fatalf("operation = %q, want %q", applicant.getOperation, fidesbffv1pb.OperationFidesBffIdentityProfileServiceGetIdentityProfile)
 	}
 	var body struct {
 		Empty bool `json:"empty"`
@@ -987,62 +1007,82 @@ func assertErrorCode(t *testing.T, raw []byte, want string) {
 }
 
 type fakeQuoteClient struct {
-	calls   int
-	command biz.CreateQuoteCommand
-	result  biz.QuoteResult
-	err     error
+	calls     int
+	command   biz.CreateQuoteCommand
+	result    biz.QuoteResult
+	err       error
+	operation string
 }
 
-func (f *fakeQuoteClient) CreateQuote(_ context.Context, command biz.CreateQuoteCommand) (biz.QuoteResult, error) {
+func (f *fakeQuoteClient) CreateQuote(ctx context.Context, command biz.CreateQuoteCommand) (biz.QuoteResult, error) {
 	f.calls++
 	f.command = command
+	f.operation = operationFromContext(ctx)
 	return f.result, f.err
 }
 
 type fakeOriginationClient struct {
-	calls         int
-	createCommand biz.CreateLoanApplicationCommand
-	getCommand    biz.GetLoanApplicationCommand
-	patchCommand  biz.PatchLoanApplicationCommand
-	summary       biz.LoanApplicationSummary
-	detail        biz.LoanApplicationDetail
-	err           error
+	calls           int
+	createCommand   biz.CreateLoanApplicationCommand
+	getCommand      biz.GetLoanApplicationCommand
+	patchCommand    biz.PatchLoanApplicationCommand
+	createOperation string
+	getOperation    string
+	patchOperation  string
+	summary         biz.LoanApplicationSummary
+	detail          biz.LoanApplicationDetail
+	err             error
 }
 
-func (f *fakeOriginationClient) CreateLoanApplication(_ context.Context, command biz.CreateLoanApplicationCommand) (biz.LoanApplicationSummary, error) {
+func (f *fakeOriginationClient) CreateLoanApplication(ctx context.Context, command biz.CreateLoanApplicationCommand) (biz.LoanApplicationSummary, error) {
 	f.calls++
 	f.createCommand = command
+	f.createOperation = operationFromContext(ctx)
 	return f.summary, f.err
 }
 
-func (f *fakeOriginationClient) GetLoanApplication(_ context.Context, command biz.GetLoanApplicationCommand) (biz.LoanApplicationDetail, error) {
+func (f *fakeOriginationClient) GetLoanApplication(ctx context.Context, command biz.GetLoanApplicationCommand) (biz.LoanApplicationDetail, error) {
 	f.calls++
 	f.getCommand = command
+	f.getOperation = operationFromContext(ctx)
 	return f.detail, f.err
 }
 
-func (f *fakeOriginationClient) PatchLoanApplication(_ context.Context, command biz.PatchLoanApplicationCommand) (biz.LoanApplicationSummary, error) {
+func (f *fakeOriginationClient) PatchLoanApplication(ctx context.Context, command biz.PatchLoanApplicationCommand) (biz.LoanApplicationSummary, error) {
 	f.calls++
 	f.patchCommand = command
+	f.patchOperation = operationFromContext(ctx)
 	return f.summary, f.err
 }
 
 type fakeApplicantProfileClient struct {
-	upsertCommand biz.UpsertIdentityProfileCommand
-	getCommand    biz.GetIdentityProfileCommand
-	upsertProfile biz.IdentityProfile
-	getResult     biz.GetIdentityProfileResult
-	err           error
+	upsertCommand   biz.UpsertIdentityProfileCommand
+	getCommand      biz.GetIdentityProfileCommand
+	upsertOperation string
+	getOperation    string
+	upsertProfile   biz.IdentityProfile
+	getResult       biz.GetIdentityProfileResult
+	err             error
 }
 
-func (f *fakeApplicantProfileClient) UpsertIdentityProfile(_ context.Context, command biz.UpsertIdentityProfileCommand) (biz.IdentityProfile, error) {
+func (f *fakeApplicantProfileClient) UpsertIdentityProfile(ctx context.Context, command biz.UpsertIdentityProfileCommand) (biz.IdentityProfile, error) {
 	f.upsertCommand = command
+	f.upsertOperation = operationFromContext(ctx)
 	return f.upsertProfile, f.err
 }
 
-func (f *fakeApplicantProfileClient) GetIdentityProfile(_ context.Context, command biz.GetIdentityProfileCommand) (biz.GetIdentityProfileResult, error) {
+func (f *fakeApplicantProfileClient) GetIdentityProfile(ctx context.Context, command biz.GetIdentityProfileCommand) (biz.GetIdentityProfileResult, error) {
 	f.getCommand = command
+	f.getOperation = operationFromContext(ctx)
 	return f.getResult, f.err
+}
+
+func operationFromContext(ctx context.Context) string {
+	tr, ok := transport.FromServerContext(ctx)
+	if !ok {
+		return ""
+	}
+	return tr.Operation()
 }
 
 type fakeOriginationDraftClient struct {
