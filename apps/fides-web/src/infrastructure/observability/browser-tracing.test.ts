@@ -4,6 +4,8 @@ describe("initializeBrowserTracing", () => {
   afterEach(() => {
     vi.doUnmock("@opentelemetry/sdk-trace-web");
     vi.doUnmock("@opentelemetry/exporter-trace-otlp-http");
+    vi.doUnmock("@opentelemetry/instrumentation");
+    vi.doUnmock("@opentelemetry/instrumentation-fetch");
   });
 
   it("does not throw when OpenTelemetry registration fails", async () => {
@@ -32,6 +34,16 @@ describe("initializeBrowserTracing", () => {
     let providerOptions: Record<string, unknown> | undefined;
     vi.doMock("@opentelemetry/exporter-trace-otlp-http", () => ({
       OTLPTraceExporter: exporter,
+    }));
+    const registerInstrumentations = vi.fn();
+    const FetchInstrumentation = vi.fn(function FetchInstrumentation(this: object, options: object) {
+      Object.assign(this, { options });
+    });
+    vi.doMock("@opentelemetry/instrumentation", () => ({
+      registerInstrumentations,
+    }));
+    vi.doMock("@opentelemetry/instrumentation-fetch", () => ({
+      FetchInstrumentation,
     }));
     const BatchSpanProcessor = vi.fn(function BatchSpanProcessor() {});
     const WebTracerProvider = vi.fn(function WebTracerProvider(
@@ -63,6 +75,12 @@ describe("initializeBrowserTracing", () => {
         "deployment.environment": "sta",
         "service.name": "fides",
       },
+    });
+    expect(FetchInstrumentation).toHaveBeenCalledWith({
+      propagateTraceHeaderCorsUrls: [/^\/api\/v1(?:\/|$)/],
+    });
+    expect(registerInstrumentations).toHaveBeenCalledWith({
+      instrumentations: [expect.any(FetchInstrumentation)],
     });
   });
 });
