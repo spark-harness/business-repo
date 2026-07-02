@@ -5,6 +5,7 @@ export type RuntimeConfig = PublicRuntimeConfig & {
   internal: {
     consulUrl?: string;
     consulKey: string;
+    bffBaseUrl?: string;
   };
 };
 
@@ -14,6 +15,9 @@ type RuntimeConfigInput = Partial<{
   browserTracing: Partial<{
     endpoint: unknown;
     headers: unknown;
+  }>;
+  internal: Partial<{
+    bffBaseUrl: unknown;
   }>;
 }>;
 
@@ -64,7 +68,7 @@ export async function loadRuntimeConfig(options: LoadRuntimeConfigOptions = {}):
 export function buildPublicRuntimeConfig(config: RuntimeConfig): PublicRuntimeConfig {
   return {
     otpAdapter: config.otpAdapter,
-    bffBaseUrl: config.bffBaseUrl,
+    bffBaseUrl: "/api/v1",
     browserTracing: {
       endpoint: config.browserTracing.endpoint,
       environment: config.environment,
@@ -110,7 +114,9 @@ async function loadConsulConfig(
 function loadEnvOverrides(): RuntimeConfigInput {
   return {
     otpAdapter: process.env.FIDES_OTP_ADAPTER,
-    bffBaseUrl: process.env.FIDES_BFF_BASE_URL,
+    internal: {
+      bffBaseUrl: process.env.FIDES_BFF_BASE_URL,
+    },
     browserTracing: {
       endpoint: process.env.FIDES_BROWSER_TRACING_ENDPOINT,
       headers: parseHeaders(process.env.FIDES_BROWSER_TRACING_HEADERS),
@@ -129,6 +135,10 @@ function mergeRuntimeConfig(config: RuntimeConfig, input: RuntimeConfigInput): R
         ? normalizeHeaders(input.browserTracing.headers)
         : config.browserTracing.headers,
     },
+    internal: {
+      ...config.internal,
+      bffBaseUrl: readString(input.internal?.bffBaseUrl) ?? config.internal.bffBaseUrl,
+    },
   };
 }
 
@@ -136,7 +146,7 @@ function validateRuntimeConfig(config: RuntimeConfig) {
   if (!config.bffBaseUrl) {
     throw new Error("FIDES_BFF_BASE_URL is required");
   }
-  if (config.environment === "prod" && config.otpAdapter === "real" && config.bffBaseUrl === "/api/v1") {
+  if (config.environment === "prod" && config.otpAdapter === "real" && !config.internal.bffBaseUrl) {
     throw new Error("Production fides runtime config must provide an explicit BFF base URL");
   }
 }

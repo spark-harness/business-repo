@@ -1,6 +1,8 @@
 import { context } from "@opentelemetry/api";
 import { W3CTraceContextPropagator } from "@opentelemetry/core";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { FetchInstrumentation } from "@opentelemetry/instrumentation-fetch";
+import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BatchSpanProcessor, WebTracerProvider } from "@opentelemetry/sdk-trace-web";
 
@@ -32,6 +34,13 @@ export function initializeBrowserTracing(config: BrowserTracingRuntimeConfig): b
         : [],
     });
     provider.register({ propagator: new W3CTraceContextPropagator() });
+    registerInstrumentations({
+      instrumentations: [
+        new FetchInstrumentation({
+          propagateTraceHeaderCorsUrls: [/^\/api\/v1(?:\/|$)/],
+        }),
+      ],
+    });
     initialized = true;
     return true;
   } catch {
