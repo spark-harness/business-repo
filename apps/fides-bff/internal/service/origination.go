@@ -1,13 +1,12 @@
 package service
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	nethttp "net/http"
 
-	khttp "github.com/go-kratos/kratos/v2/transport/http"
+	fidesbffv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/fides-bff/v1"
 	"github.com/spark/bffkit"
 
 	"github.com/spark/fides-bff/internal/biz"
@@ -21,109 +20,95 @@ func NewOriginationService(uc *biz.OriginationUsecase) *OriginationService {
 	return &OriginationService{uc: uc}
 }
 
-func (s *OriginationService) CreateLoanApplication(ctx khttp.Context) error {
-	principal, ok := bffkit.PrincipalFromContext(ctx.Request().Context())
+func (s *OriginationService) CreateLoanApplication(ctx context.Context, req *fidesbffv1pb.FidesBffLoanApplicationServiceCreateLoanApplicationRequest) (*fidesbffv1pb.FidesBffLoanApplicationServiceCreateLoanApplicationResponse, error) {
+	principal, ok := bffkit.PrincipalFromContext(ctx)
 	if !ok {
-		return bffkit.UnauthorizedError()
+		return nil, bffkit.UnauthorizedError()
 	}
-	body, err := decodeJSONRequest(ctx.Request())
+	headers := requestHeaders(ctx)
+	raw, err := marshalCreateLoanApplicationRequest(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	result, err := s.uc.CreateLoanApplication(ctx.Request().Context(), biz.CreateLoanApplicationCommand{
+	result, err := s.uc.CreateLoanApplication(ctx, biz.CreateLoanApplicationCommand{
 		ApplicantID:    principal.ApplicantID,
-		IdempotencyKey: ctx.Request().Header.Get(bffkit.HeaderIdempotencyKey),
-		TraceParent:    ctx.Request().Header.Get(bffkit.HeaderTraceParent),
-		TraceState:     ctx.Request().Header.Get(bffkit.HeaderTraceState),
-		RawRequest:     body,
+		IdempotencyKey: headers.Get(bffkit.HeaderIdempotencyKey),
+		TraceParent:    headers.Get(bffkit.HeaderTraceParent),
+		TraceState:     headers.Get(bffkit.HeaderTraceState),
+		RawRequest:     raw,
 	})
 	if err != nil {
-		return originationHTTPError(err)
+		return nil, originationHTTPError(err)
 	}
-	return ctx.JSON(nethttp.StatusOK, loanApplicationSummaryResponse(result))
+	return mapCreateLoanApplicationResponse(result), nil
 }
 
-func (s *OriginationService) GetLoanApplication(ctx khttp.Context) error {
-	principal, ok := bffkit.PrincipalFromContext(ctx.Request().Context())
+func (s *OriginationService) GetLoanApplication(ctx context.Context, req *fidesbffv1pb.FidesBffLoanApplicationServiceGetLoanApplicationRequest) (*fidesbffv1pb.FidesBffLoanApplicationServiceGetLoanApplicationResponse, error) {
+	principal, ok := bffkit.PrincipalFromContext(ctx)
 	if !ok {
-		return bffkit.UnauthorizedError()
+		return nil, bffkit.UnauthorizedError()
 	}
-	result, err := s.uc.GetLoanApplication(ctx.Request().Context(), biz.GetLoanApplicationCommand{
+	headers := requestHeaders(ctx)
+	result, err := s.uc.GetLoanApplication(ctx, biz.GetLoanApplicationCommand{
 		ApplicantID:   principal.ApplicantID,
-		ApplicationID: ctx.Vars().Get("applicationId"),
-		TraceParent:   ctx.Request().Header.Get(bffkit.HeaderTraceParent),
-		TraceState:    ctx.Request().Header.Get(bffkit.HeaderTraceState),
+		ApplicationID: req.GetApplicationId(),
+		TraceParent:   headers.Get(bffkit.HeaderTraceParent),
+		TraceState:    headers.Get(bffkit.HeaderTraceState),
 	})
 	if err != nil {
-		return originationHTTPError(err)
+		return nil, originationHTTPError(err)
 	}
-	return ctx.JSON(nethttp.StatusOK, mapLoanApplicationDetailResponse(result))
+	return mapGetLoanApplicationResponse(result), nil
 }
 
-func (s *OriginationService) PatchLoanApplication(ctx khttp.Context) error {
-	principal, ok := bffkit.PrincipalFromContext(ctx.Request().Context())
+func (s *OriginationService) UpdateLoanApplication(ctx context.Context, req *fidesbffv1pb.FidesBffLoanApplicationServiceUpdateLoanApplicationRequest) (*fidesbffv1pb.FidesBffLoanApplicationServiceUpdateLoanApplicationResponse, error) {
+	principal, ok := bffkit.PrincipalFromContext(ctx)
 	if !ok {
-		return bffkit.UnauthorizedError()
+		return nil, bffkit.UnauthorizedError()
 	}
-	body, err := decodeJSONRequest(ctx.Request())
+	headers := requestHeaders(ctx)
+	raw, err := marshalUpdateLoanApplicationRequest(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	result, err := s.uc.PatchLoanApplication(ctx.Request().Context(), biz.PatchLoanApplicationCommand{
+	result, err := s.uc.PatchLoanApplication(ctx, biz.PatchLoanApplicationCommand{
 		ApplicantID:    principal.ApplicantID,
-		ApplicationID:  ctx.Vars().Get("applicationId"),
-		IdempotencyKey: ctx.Request().Header.Get(bffkit.HeaderIdempotencyKey),
-		TraceParent:    ctx.Request().Header.Get(bffkit.HeaderTraceParent),
-		TraceState:     ctx.Request().Header.Get(bffkit.HeaderTraceState),
-		RawRequest:     body,
+		ApplicationID:  req.GetApplicationId(),
+		IdempotencyKey: headers.Get(bffkit.HeaderIdempotencyKey),
+		TraceParent:    headers.Get(bffkit.HeaderTraceParent),
+		TraceState:     headers.Get(bffkit.HeaderTraceState),
+		RawRequest:     raw,
 	})
 	if err != nil {
-		return originationHTTPError(err)
+		return nil, originationHTTPError(err)
 	}
-	return ctx.JSON(nethttp.StatusOK, loanApplicationSummaryResponse(result))
+	return &fidesbffv1pb.FidesBffLoanApplicationServiceUpdateLoanApplicationResponse{
+		ApplicationId: result.ApplicationID,
+		Status:        result.Status,
+		CurrentStep:   result.CurrentStep,
+	}, nil
 }
 
-type loanApplicationSummaryResponse struct {
-	ApplicationID string `json:"applicationId"`
-	Status        string `json:"status"`
-	CurrentStep   string `json:"currentStep"`
+func mapCreateLoanApplicationResponse(result biz.LoanApplicationSummary) *fidesbffv1pb.FidesBffLoanApplicationServiceCreateLoanApplicationResponse {
+	return &fidesbffv1pb.FidesBffLoanApplicationServiceCreateLoanApplicationResponse{
+		ApplicationId: result.ApplicationID,
+		Status:        result.Status,
+		CurrentStep:   result.CurrentStep,
+	}
 }
 
-type loanApplicationDetailResponse struct {
-	ApplicationID string                `json:"applicationId"`
-	Loan          loanTermsResponse     `json:"loan"`
-	AcceptedQuote acceptedQuoteResponse `json:"acceptedQuote"`
-	Status        string                `json:"status"`
-	CurrentStep   string                `json:"currentStep"`
-}
-
-type loanTermsResponse struct {
-	Amount  string `json:"amount"`
-	Term    int    `json:"term"`
-	Purpose string `json:"purpose"`
-}
-
-type acceptedQuoteResponse struct {
-	QuoteID       string `json:"quoteId"`
-	Monthly       string `json:"monthly"`
-	APR           string `json:"apr"`
-	TotalInterest string `json:"totalInterest"`
-	TotalPayable  string `json:"totalPayable"`
-	ValidUntil    string `json:"validUntil"`
-}
-
-func mapLoanApplicationDetailResponse(result biz.LoanApplicationDetail) loanApplicationDetailResponse {
-	return loanApplicationDetailResponse{
-		ApplicationID: result.ApplicationID,
-		Loan: loanTermsResponse{
+func mapGetLoanApplicationResponse(result biz.LoanApplicationDetail) *fidesbffv1pb.FidesBffLoanApplicationServiceGetLoanApplicationResponse {
+	return &fidesbffv1pb.FidesBffLoanApplicationServiceGetLoanApplicationResponse{
+		ApplicationId: result.ApplicationID,
+		Loan: &fidesbffv1pb.FidesBffLoanTerms{
 			Amount:  result.Loan.Amount,
-			Term:    result.Loan.Term,
+			Term:    int32(result.Loan.Term),
 			Purpose: result.Loan.Purpose,
 		},
-		AcceptedQuote: acceptedQuoteResponse{
-			QuoteID:       result.AcceptedQuote.QuoteID,
+		AcceptedQuote: &fidesbffv1pb.FidesBffAcceptedQuote{
+			QuoteId:       result.AcceptedQuote.QuoteID,
 			Monthly:       result.AcceptedQuote.Monthly,
-			APR:           result.AcceptedQuote.APR,
+			Apr:           result.AcceptedQuote.APR,
 			TotalInterest: result.AcceptedQuote.TotalInterest,
 			TotalPayable:  result.AcceptedQuote.TotalPayable,
 			ValidUntil:    result.AcceptedQuote.ValidUntil,
@@ -133,18 +118,42 @@ func mapLoanApplicationDetailResponse(result biz.LoanApplicationDetail) loanAppl
 	}
 }
 
-func decodeJSONRequest(r *nethttp.Request) (json.RawMessage, error) {
-	data, err := io.ReadAll(r.Body)
+func marshalCreateLoanApplicationRequest(req *fidesbffv1pb.FidesBffLoanApplicationServiceCreateLoanApplicationRequest) (json.RawMessage, error) {
+	return marshalLoanApplicationBody(req.GetProductCode(), req.GetQuoteId(), req.GetLoan())
+}
+
+func marshalUpdateLoanApplicationRequest(req *fidesbffv1pb.FidesBffLoanApplicationServiceUpdateLoanApplicationRequest) (json.RawMessage, error) {
+	return marshalLoanApplicationBody("", req.GetQuoteId(), req.GetLoan())
+}
+
+func marshalLoanApplicationBody(productCode string, quoteID string, loan *fidesbffv1pb.FidesBffLoanTerms) (json.RawMessage, error) {
+	body := struct {
+		ProductCode string         `json:"productCode,omitempty"`
+		QuoteID     string         `json:"quoteId"`
+		Loan        *loanTermsJSON `json:"loan,omitempty"`
+	}{
+		ProductCode: productCode,
+		QuoteID:     quoteID,
+		Loan:        loanTermsBody(loan),
+	}
+	raw, err := json.Marshal(body)
 	if err != nil {
-		return nil, bffkit.ValidationError([]bffkit.FieldError{{Field: "", Message: "invalid JSON request body"}})
+		return nil, err
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	var parsed any
-	if err := decoder.Decode(&parsed); err != nil {
-		return nil, bffkit.ValidationError([]bffkit.FieldError{{Field: "", Message: "invalid JSON request body"}})
+	return raw, nil
+}
+
+type loanTermsJSON struct {
+	Amount  string `json:"amount"`
+	Term    int32  `json:"term"`
+	Purpose string `json:"purpose"`
+}
+
+func loanTermsBody(loan *fidesbffv1pb.FidesBffLoanTerms) *loanTermsJSON {
+	if loan == nil {
+		return nil
 	}
-	return append(json.RawMessage(nil), data...), nil
+	return &loanTermsJSON{Amount: loan.GetAmount(), Term: loan.GetTerm(), Purpose: loan.GetPurpose()}
 }
 
 func originationHTTPError(err error) error {

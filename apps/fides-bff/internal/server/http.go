@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/go-kratos/kratos/v2/transport/http"
+	khttp "github.com/go-kratos/kratos/v2/transport/http"
 	fidesbffv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/fides-bff/v1"
 	"github.com/spark/bffkit"
 
@@ -25,10 +25,11 @@ func NewHTTPServer(
 	tokenValidator bffkit.TokenValidator,
 	store bffkit.IdempotencyStore,
 	logger log.Logger,
-) *http.Server {
-	opts := []http.ServerOption{
-		http.ErrorEncoder(bffkit.ErrorEncoder),
-		http.Filter(
+) *khttp.Server {
+	opts := []khttp.ServerOption{
+		khttp.ErrorEncoder(bffkit.ErrorEncoder),
+		khttp.ResponseEncoder(compatResponseEncoder),
+		khttp.Filter(
 			bffkit.TraceFilter(log.NewHelper(logger)),
 			bffkit.CORSFilter(bffkit.CORSConfig{
 				AllowedOrigins: c.CORS.AllowedOrigins,
@@ -46,27 +47,24 @@ func NewHTTPServer(
 		),
 	}
 	if c.HTTP.Network != "" {
-		opts = append(opts, http.Network(c.HTTP.Network))
+		opts = append(opts, khttp.Network(c.HTTP.Network))
 	}
 	if c.HTTP.Addr != "" {
-		opts = append(opts, http.Address(c.HTTP.Addr))
+		opts = append(opts, khttp.Address(c.HTTP.Addr))
 	}
-	srv := http.NewServer(opts...)
+	srv := khttp.NewServer(opts...)
 
 	v1 := srv.Route("/api/v1")
 	v1.GET("/health", health.Health)
-	v1.POST("/pricing/quotes", pricing.CreateQuote)
-	v1.POST("/loan-applications", origination.CreateLoanApplication)
-	v1.GET("/loan-applications/{applicationId}", origination.GetLoanApplication)
-	v1.PATCH("/loan-applications/{applicationId}", origination.PatchLoanApplication)
-	v1.GET("/me/identity-profile", identityProfile.GetIdentityProfile)
-	v1.PUT("/me/identity-profile", identityProfile.UpsertIdentityProfile)
 	srv.Handle("/api/v1/protected/session:probe", nethttp.HandlerFunc(protectedSessionProbe))
 	fidesbffv1pb.RegisterFidesBffAuthServiceHTTPServer(srv, auth)
+	fidesbffv1pb.RegisterFidesBffPricingServiceHTTPServer(srv, pricing)
+	fidesbffv1pb.RegisterFidesBffLoanApplicationServiceHTTPServer(srv, origination)
+	fidesbffv1pb.RegisterFidesBffIdentityProfileServiceHTTPServer(srv, identityProfile)
 	return srv
 }
 
-func protectedPathAuthFilter(tokenValidator bffkit.TokenValidator) http.FilterFunc {
+func protectedPathAuthFilter(tokenValidator bffkit.TokenValidator) khttp.FilterFunc {
 	return func(next nethttp.Handler) nethttp.Handler {
 		return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			if isProtectedPath(r.URL.Path) {
@@ -99,4 +97,103 @@ func protectedSessionProbe(w nethttp.ResponseWriter, r *nethttp.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(nethttp.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"applicantId": principal.ApplicantID})
+}
+
+func compatResponseEncoder(w nethttp.ResponseWriter, r *nethttp.Request, v any) error {
+	switch reply := v.(type) {
+	case *fidesbffv1pb.FidesBffIdentityProfileServiceUpsertIdentityProfileResponse:
+		return writeJSON(w, identityProfileUpsertJSON{
+			Profile:     identityProfileJSON(reply.GetProfile()),
+			CurrentStep: applicationStepJSON(reply.GetCurrentStep().String()),
+		})
+	case *fidesbffv1pb.FidesBffIdentityProfileServiceGetIdentityProfileResponse:
+		body := identityProfileGetJSON{Empty: reply.GetEmpty()}
+		if reply.GetProfile() != nil {
+			profile := identityProfileJSON(reply.GetProfile())
+			body.Profile = &profile
+		}
+		return writeJSON(w, body)
+	default:
+		return khttp.DefaultResponseEncoder(w, r, v)
+	}
+}
+
+type identityProfileUpsertJSON struct {
+	Profile     identityProfileResponseJSON `json:"profile"`
+	CurrentStep string                      `json:"currentStep"`
+}
+
+type identityProfileGetJSON struct {
+	Empty   bool                         `json:"empty"`
+	Profile *identityProfileResponseJSON `json:"profile,omitempty"`
+}
+
+type identityProfileResponseJSON struct {
+	HKIDBody       string `json:"hkidBody"`
+	HKIDCheckDigit string `json:"hkidCheckDigit"`
+	FirstName      string `json:"firstName"`
+	LastName       string `json:"lastName"`
+	ChineseName    string `json:"chineseName"`
+	Nationality    string `json:"nationality"`
+	DateOfBirth    string `json:"dateOfBirth"`
+}
+
+func identityProfileJSON(profile *fidesbffv1pb.FidesBffIdentityProfile) identityProfileResponseJSON {
+	if profile == nil {
+		return identityProfileResponseJSON{}
+	}
+	return identityProfileResponseJSON{
+		HKIDBody:       profile.GetHkidBody(),
+		HKIDCheckDigit: profile.GetHkidCheckDigit(),
+		FirstName:      profile.GetFirstName(),
+		LastName:       profile.GetLastName(),
+		ChineseName:    profile.GetChineseName(),
+		Nationality:    nationalityJSON(profile.GetNationality().String()),
+		DateOfBirth:    profile.GetDateOfBirth(),
+	}
+}
+
+func writeJSON(w nethttp.ResponseWriter, v any) error {
+	w.Header().Set("Content-Type", "application/json")
+	return json.NewEncoder(w).Encode(v)
+}
+
+func nationalityJSON(value string) string {
+	switch value {
+	case "NATIONALITY_CHINESE":
+		return "chinese"
+	case "NATIONALITY_HONG_KONG":
+		return "hong_kong"
+	case "NATIONALITY_BRITISH":
+		return "british"
+	case "NATIONALITY_INDIAN":
+		return "indian"
+	case "NATIONALITY_FILIPINO":
+		return "filipino"
+	case "NATIONALITY_INDONESIAN":
+		return "indonesian"
+	case "NATIONALITY_PAKISTANI":
+		return "pakistani"
+	case "NATIONALITY_AMERICAN":
+		return "american"
+	case "NATIONALITY_AUSTRALIAN":
+		return "australian"
+	case "NATIONALITY_CANADIAN":
+		return "canadian"
+	case "NATIONALITY_OTHER":
+		return "other"
+	default:
+		return ""
+	}
+}
+
+func applicationStepJSON(value string) string {
+	switch value {
+	case "APPLICATION_STEP_LOAN_REQUEST":
+		return "loan_request"
+	case "APPLICATION_STEP_IDENTITY_INFORMATION":
+		return "identity_information"
+	default:
+		return ""
+	}
 }

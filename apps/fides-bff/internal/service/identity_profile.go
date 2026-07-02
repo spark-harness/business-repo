@@ -1,12 +1,13 @@
 package service
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
-	"fmt"
 	nethttp "net/http"
 
-	khttp "github.com/go-kratos/kratos/v2/transport/http"
+	applicantv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/applicant/v1"
+	fidesbffv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/fides-bff/v1"
+	originationv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/origination/v1"
 	"github.com/spark/bffkit"
 
 	"github.com/spark/fides-bff/internal/biz"
@@ -20,132 +21,138 @@ func NewIdentityProfileService(uc *biz.IdentityProfileUsecase) *IdentityProfileS
 	return &IdentityProfileService{uc: uc}
 }
 
-func (s *IdentityProfileService) UpsertIdentityProfile(ctx khttp.Context) error {
-	principal, ok := bffkit.PrincipalFromContext(ctx.Request().Context())
+func (s *IdentityProfileService) UpsertIdentityProfile(ctx context.Context, req *fidesbffv1pb.FidesBffIdentityProfileServiceUpsertIdentityProfileRequest) (*fidesbffv1pb.FidesBffIdentityProfileServiceUpsertIdentityProfileResponse, error) {
+	principal, ok := bffkit.PrincipalFromContext(ctx)
 	if !ok {
-		return bffkit.UnauthorizedError()
+		return nil, bffkit.UnauthorizedError()
 	}
-	var req identityProfileUpsertRequest
-	if err := json.NewDecoder(ctx.Request().Body).Decode(&req); err != nil {
-		return bffkit.ValidationError([]bffkit.FieldError{{Field: "", Message: "invalid JSON request body"}})
-	}
-	result, err := s.uc.Upsert(ctx.Request().Context(), biz.UpsertIdentityProfileCommand{
+	headers := requestHeaders(ctx)
+	profile := req.GetProfile()
+	result, err := s.uc.Upsert(ctx, biz.UpsertIdentityProfileCommand{
 		ApplicantID:   principal.ApplicantID,
-		ApplicationID: req.ApplicationID,
+		ApplicationID: req.GetApplicationId(),
 		Profile: biz.IdentityProfile{
-			HKIDBody:       req.Profile.HKIDBody,
-			HKIDCheckDigit: req.Profile.HKIDCheckDigit,
-			FirstName:      req.Profile.FirstName,
-			LastName:       req.Profile.LastName,
-			ChineseName:    req.Profile.ChineseName,
-			Nationality:    req.Profile.Nationality.String(),
-			DateOfBirth:    req.Profile.DateOfBirth,
+			HKIDBody:       profile.GetHkidBody(),
+			HKIDCheckDigit: profile.GetHkidCheckDigit(),
+			FirstName:      profile.GetFirstName(),
+			LastName:       profile.GetLastName(),
+			ChineseName:    profile.GetChineseName(),
+			Nationality:    nationalityFromProto(profile.GetNationality()),
+			DateOfBirth:    profile.GetDateOfBirth(),
 		},
-		TraceParent: ctx.Request().Header.Get(bffkit.HeaderTraceParent),
-		TraceState:  ctx.Request().Header.Get(bffkit.HeaderTraceState),
+		TraceParent: headers.Get(bffkit.HeaderTraceParent),
+		TraceState:  headers.Get(bffkit.HeaderTraceState),
 	})
 	if err != nil {
-		return identityProfileHTTPError(err)
+		return nil, identityProfileHTTPError(err)
 	}
-	return ctx.JSON(nethttp.StatusOK, identityProfileUpsertResponse{
-		Profile:     identityProfileResponse(result.Profile),
-		CurrentStep: result.CurrentStep,
-	})
+	return &fidesbffv1pb.FidesBffIdentityProfileServiceUpsertIdentityProfileResponse{
+		Profile:     identityProfileToProto(result.Profile),
+		CurrentStep: applicationStepToProto(result.CurrentStep),
+	}, nil
 }
 
-func (s *IdentityProfileService) GetIdentityProfile(ctx khttp.Context) error {
-	principal, ok := bffkit.PrincipalFromContext(ctx.Request().Context())
+func (s *IdentityProfileService) GetIdentityProfile(ctx context.Context, req *fidesbffv1pb.FidesBffIdentityProfileServiceGetIdentityProfileRequest) (*fidesbffv1pb.FidesBffIdentityProfileServiceGetIdentityProfileResponse, error) {
+	principal, ok := bffkit.PrincipalFromContext(ctx)
 	if !ok {
-		return bffkit.UnauthorizedError()
+		return nil, bffkit.UnauthorizedError()
 	}
-	result, err := s.uc.Get(ctx.Request().Context(), biz.GetIdentityProfileCommand{
+	headers := requestHeaders(ctx)
+	result, err := s.uc.Get(ctx, biz.GetIdentityProfileCommand{
 		ApplicantID:   principal.ApplicantID,
-		ApplicationID: ctx.Request().URL.Query().Get("applicationId"),
-		TraceParent:   ctx.Request().Header.Get(bffkit.HeaderTraceParent),
-		TraceState:    ctx.Request().Header.Get(bffkit.HeaderTraceState),
+		ApplicationID: req.GetApplicationId(),
+		TraceParent:   headers.Get(bffkit.HeaderTraceParent),
+		TraceState:    headers.Get(bffkit.HeaderTraceState),
 	})
 	if err != nil {
-		return identityProfileHTTPError(err)
+		return nil, identityProfileHTTPError(err)
 	}
-	response := identityProfileGetResponse{Empty: result.Empty}
+	response := &fidesbffv1pb.FidesBffIdentityProfileServiceGetIdentityProfileResponse{Empty: result.Empty}
 	if !result.Empty {
-		profile := identityProfileResponse(result.Profile)
-		response.Profile = &profile
+		response.Profile = identityProfileToProto(result.Profile)
 	}
-	return ctx.JSON(nethttp.StatusOK, response)
+	return response, nil
 }
 
-type identityProfileUpsertRequest struct {
-	ApplicationID string                 `json:"applicationId"`
-	Profile       identityProfileRequest `json:"profile"`
-}
-
-type identityProfileRequest struct {
-	HKIDBody       string                     `json:"hkidBody"`
-	HKIDCheckDigit string                     `json:"hkidCheckDigit"`
-	FirstName      string                     `json:"firstName"`
-	LastName       string                     `json:"lastName"`
-	ChineseName    string                     `json:"chineseName"`
-	Nationality    identityProfileNationality `json:"nationality"`
-	DateOfBirth    string                     `json:"dateOfBirth"`
-}
-
-type identityProfileNationality string
-
-func (n *identityProfileNationality) UnmarshalJSON(data []byte) error {
-	var text string
-	if err := json.Unmarshal(data, &text); err == nil {
-		*n = identityProfileNationality(text)
-		return nil
+func identityProfileToProto(profile biz.IdentityProfile) *fidesbffv1pb.FidesBffIdentityProfile {
+	return &fidesbffv1pb.FidesBffIdentityProfile{
+		HkidBody:       profile.HKIDBody,
+		HkidCheckDigit: profile.HKIDCheckDigit,
+		FirstName:      profile.FirstName,
+		LastName:       profile.LastName,
+		ChineseName:    profile.ChineseName,
+		Nationality:    nationalityToProto(profile.Nationality),
+		DateOfBirth:    profile.DateOfBirth,
 	}
-	var number int
-	if err := json.Unmarshal(data, &number); err != nil {
-		return err
+}
+
+func nationalityFromProto(n applicantv1pb.Nationality) string {
+	switch n {
+	case applicantv1pb.Nationality_NATIONALITY_CHINESE:
+		return "chinese"
+	case applicantv1pb.Nationality_NATIONALITY_HONG_KONG:
+		return "hong_kong"
+	case applicantv1pb.Nationality_NATIONALITY_BRITISH:
+		return "british"
+	case applicantv1pb.Nationality_NATIONALITY_INDIAN:
+		return "indian"
+	case applicantv1pb.Nationality_NATIONALITY_FILIPINO:
+		return "filipino"
+	case applicantv1pb.Nationality_NATIONALITY_INDONESIAN:
+		return "indonesian"
+	case applicantv1pb.Nationality_NATIONALITY_PAKISTANI:
+		return "pakistani"
+	case applicantv1pb.Nationality_NATIONALITY_AMERICAN:
+		return "american"
+	case applicantv1pb.Nationality_NATIONALITY_AUSTRALIAN:
+		return "australian"
+	case applicantv1pb.Nationality_NATIONALITY_CANADIAN:
+		return "canadian"
+	case applicantv1pb.Nationality_NATIONALITY_OTHER:
+		return "other"
+	default:
+		return ""
 	}
-	value, ok := identityProfileNationalityByNumber[number]
-	if !ok {
-		return fmt.Errorf("unsupported nationality enum: %d", number)
+}
+
+func nationalityToProto(n string) applicantv1pb.Nationality {
+	switch n {
+	case "chinese":
+		return applicantv1pb.Nationality_NATIONALITY_CHINESE
+	case "hong_kong":
+		return applicantv1pb.Nationality_NATIONALITY_HONG_KONG
+	case "british":
+		return applicantv1pb.Nationality_NATIONALITY_BRITISH
+	case "indian":
+		return applicantv1pb.Nationality_NATIONALITY_INDIAN
+	case "filipino":
+		return applicantv1pb.Nationality_NATIONALITY_FILIPINO
+	case "indonesian":
+		return applicantv1pb.Nationality_NATIONALITY_INDONESIAN
+	case "pakistani":
+		return applicantv1pb.Nationality_NATIONALITY_PAKISTANI
+	case "american":
+		return applicantv1pb.Nationality_NATIONALITY_AMERICAN
+	case "australian":
+		return applicantv1pb.Nationality_NATIONALITY_AUSTRALIAN
+	case "canadian":
+		return applicantv1pb.Nationality_NATIONALITY_CANADIAN
+	case "other":
+		return applicantv1pb.Nationality_NATIONALITY_OTHER
+	default:
+		return applicantv1pb.Nationality_NATIONALITY_UNSPECIFIED
 	}
-	*n = identityProfileNationality(value)
-	return nil
 }
 
-func (n identityProfileNationality) String() string {
-	return string(n)
-}
-
-var identityProfileNationalityByNumber = map[int]string{
-	1:  "chinese",
-	2:  "hong_kong",
-	3:  "british",
-	4:  "indian",
-	5:  "filipino",
-	6:  "indonesian",
-	7:  "pakistani",
-	8:  "american",
-	9:  "australian",
-	10: "canadian",
-	11: "other",
-}
-
-type identityProfileResponse struct {
-	HKIDBody       string `json:"hkidBody"`
-	HKIDCheckDigit string `json:"hkidCheckDigit"`
-	FirstName      string `json:"firstName"`
-	LastName       string `json:"lastName"`
-	ChineseName    string `json:"chineseName"`
-	Nationality    string `json:"nationality"`
-	DateOfBirth    string `json:"dateOfBirth"`
-}
-
-type identityProfileUpsertResponse struct {
-	Profile     identityProfileResponse `json:"profile"`
-	CurrentStep string                  `json:"currentStep"`
-}
-
-type identityProfileGetResponse struct {
-	Empty   bool                     `json:"empty"`
-	Profile *identityProfileResponse `json:"profile,omitempty"`
+func applicationStepToProto(step string) originationv1pb.ApplicationStep {
+	switch step {
+	case "loan_request":
+		return originationv1pb.ApplicationStep_APPLICATION_STEP_LOAN_REQUEST
+	case "identity_information":
+		return originationv1pb.ApplicationStep_APPLICATION_STEP_IDENTITY_INFORMATION
+	default:
+		return originationv1pb.ApplicationStep_APPLICATION_STEP_UNSPECIFIED
+	}
 }
 
 func identityProfileHTTPError(err error) error {
