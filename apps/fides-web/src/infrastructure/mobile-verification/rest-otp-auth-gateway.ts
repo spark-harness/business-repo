@@ -8,9 +8,15 @@ import type {
   VerifyOtpCommand,
   VerifyOtpResult,
 } from "@/application/mobile-verification/otp-auth-gateway";
-import { context, trace } from "@opentelemetry/api";
-import type { Context } from "@opentelemetry/api";
-import { W3CTraceContextPropagator } from "@opentelemetry/core";
+import {
+  defaultFetch,
+  generatedClientBasePath,
+  readBffErrorEnvelope,
+  requestInitWithHeaders,
+  retryAfter,
+  timeoutFetch,
+  type Fetcher,
+} from "@/infrastructure/bff/generated-client";
 import {
   Configuration,
   FidesBffAuthServiceApi,
@@ -19,9 +25,7 @@ import {
   type SendOtpResponse,
   type VerifyOtpResponse,
 } from "@spark-harness/idl-ts-client/vesta/lendora/fides-bff/v1";
-import { activeContext } from "@/infrastructure/observability/browser-tracing";
 
-type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type FidesBffApiFactory = (configuration: Configuration) => FidesBffAuthServiceApi;
 
 export class RestOtpAuthGateway implements OtpAuthGateway {
@@ -42,7 +46,7 @@ export class RestOtpAuthGateway implements OtpAuthGateway {
           {
             pre: async ({ url, init }) => ({
               url,
-              init: requestInitWithTraceHeaders(init, this.traceHeaders(this.idempotencyKey)),
+              init: requestInitWithHeaders(init, baseHeaders(this.idempotencyKey)),
             }),
           },
         ],
@@ -98,32 +102,6 @@ export class RestOtpAuthGateway implements OtpAuthGateway {
       this.idempotencyKey = "";
     }
   }
-
-  private traceHeaders(idempotencyKey: string): Record<string, string> {
-    try {
-      const baseContext = activeContext();
-      const tracer = trace.getTracer("fides.mobile-verification");
-      const span = tracer.startSpan("POST fides-bff");
-      const requestContext = trace.setSpan(baseContext, span);
-      return context.with(requestContext, () => {
-        try {
-          return traceHeaders(idempotencyKey, requestContext);
-        } finally {
-          span.end();
-        }
-      });
-    } catch {
-      return baseHeaders(idempotencyKey);
-    }
-  }
-}
-
-function defaultFetch(input: RequestInfo | URL, init?: RequestInit) {
-  return fetch(input, init);
-}
-
-function generatedClientBasePath(baseUrl: string): string {
-  return baseUrl.replace(/\/api\/v1\/?$/, "");
 }
 
 function toSendOtpResult(response: SendOtpResponse): SendOtpResult {
@@ -175,71 +153,14 @@ function incompleteBffResponse(): BffOtpError {
   return { code: "system_error", message: "Incomplete BFF response" };
 }
 
-function requestInitWithTraceHeaders(init: RequestInit, headers: Record<string, string>): RequestInit {
-  const nextInit: RequestInit = {
-    ...init,
-    headers: {
-      ...(init.headers as Record<string, string> | undefined),
-      ...headers,
-    },
-  };
-  if (nextInit.credentials === undefined) {
-    delete nextInit.credentials;
-  }
-  return nextInit;
-}
-
-function timeoutFetch(fetcher: Fetcher, timeoutMs: number): Fetcher {
-  return async (input, init) => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      return await fetcher(input, {
-        ...init,
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-  };
-}
-
-function traceHeaders(idempotencyKey: string, requestContext: Context): Record<string, string> {
-  const headers = baseHeaders(idempotencyKey);
-  try {
-    new W3CTraceContextPropagator().inject(requestContext, headers, {
-      set(carrier, key, value) {
-        carrier[key] = value;
-      },
-    });
-  } catch {
-    return headers;
-  }
-  const traceId = trace.getSpanContext(requestContext)?.traceId;
-  if (traceId && traceId !== "00000000000000000000000000000000") {
-    headers["X-Trace-Id"] = traceId;
-    return headers;
-  }
-  const fallbackTraceId = randomHex(16);
-  headers.traceparent = `00-${fallbackTraceId}-${randomHex(8)}-01`;
-  headers["X-Trace-Id"] = fallbackTraceId;
-  return headers;
-}
-
 function baseHeaders(idempotencyKey: string): Record<string, string> {
   return {
     "Idempotency-Key": idempotencyKey,
   };
 }
 
-function randomHex(byteLength: number): string {
-  const bytes = new Uint8Array(byteLength);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 async function normalizeBffError(error: ResponseError): Promise<BffOtpError> {
-  const envelope = await readErrorEnvelope(error.response);
+  const envelope = await readBffErrorEnvelope(error.response);
   if (envelope.code === "unknown" && error.response.status === 401) {
     return { code: "unauthorized" };
   }
@@ -255,37 +176,4 @@ async function normalizeBffError(error: ResponseError): Promise<BffOtpError> {
     traceId: envelope.traceId,
     retryAfterSec: envelope.retryAfterSec,
   };
-}
-
-async function readErrorEnvelope(response: Response): Promise<BffOtpError> {
-  try {
-    const payload = (await response.json()) as unknown;
-    if (
-      payload &&
-      typeof payload === "object" &&
-      "error" in payload &&
-      payload.error &&
-      typeof payload.error === "object"
-    ) {
-      const error = payload.error as Record<string, unknown>;
-      return {
-        code: String(error.code ?? "unknown"),
-        message: typeof error.message === "string" ? error.message : undefined,
-        traceId: typeof error.traceId === "string" ? error.traceId : undefined,
-        retryAfterSec: typeof error.retryAfterSec === "number" ? error.retryAfterSec : retryAfter(response.headers),
-      };
-    }
-  } catch {
-    // Preserve bare HTTP status mapping below.
-  }
-  return { code: response.status >= 500 ? "system_error" : "unknown", retryAfterSec: retryAfter(response.headers) };
-}
-
-function retryAfter(headers: Headers): number | undefined {
-  const value = headers.get("Retry-After");
-  if (!value) {
-    return undefined;
-  }
-  const seconds = Number(value);
-  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined;
 }

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RestLoanRequestGateway } from "./rest-loan-request-gateway";
 
 describe("RestLoanRequestGateway", () => {
-  it("posts pricing quotes to the BFF with auth, idempotency and trace headers", async () => {
+  it("posts pricing quotes to the BFF with auth and idempotency headers only", async () => {
     const fetcher = vi.fn().mockResolvedValue(
       jsonResponse({
         quoteId: "quote_1",
@@ -29,8 +29,6 @@ describe("RestLoanRequestGateway", () => {
         Authorization: "Bearer access-token",
         "Content-Type": "application/json",
         "Idempotency-Key": "price-key",
-        "X-Trace-Id": expect.stringMatching(/^[0-9a-f]{32}$/),
-        traceparent: expect.stringMatching(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/),
       },
       body: JSON.stringify({
         productCode: "PIL",

@@ -34,8 +34,6 @@ describe("RestOtpAuthGateway", () => {
       headers: {
         "Content-Type": "application/json",
         "Idempotency-Key": "send-key",
-        "X-Trace-Id": expect.stringMatching(/^[0-9a-f]{32}$/),
-        traceparent: expect.stringMatching(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/),
       },
       body: JSON.stringify({ countryCode: "+852", phone: "91234567" }),
       signal: expect.any(AbortSignal),
@@ -125,8 +123,6 @@ describe("RestOtpAuthGateway", () => {
       headers: {
         "Content-Type": "application/json",
         "Idempotency-Key": "refresh-key",
-        "X-Trace-Id": expect.stringMatching(/^[0-9a-f]{32}$/),
-        traceparent: expect.stringMatching(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/),
       },
       body: JSON.stringify({ refreshToken: "refresh-token" }),
       signal: expect.any(AbortSignal),
