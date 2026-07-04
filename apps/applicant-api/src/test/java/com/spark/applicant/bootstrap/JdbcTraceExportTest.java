@@ -31,6 +31,7 @@ import org.springframework.test.context.DynamicPropertySource;
             "spark.applicant.auth.migrations-enabled=true",
             "spark.applicant.auth.consul.enabled=false",
             "spring.data.redis.host=localhost",
+            "spring.data.redis.password=forest_dev_password",
             "otel.traces.exporter=otlp",
             "otel.exporter.otlp.traces.protocol=http/protobuf",
             "otel.traces.sampler=always_on",

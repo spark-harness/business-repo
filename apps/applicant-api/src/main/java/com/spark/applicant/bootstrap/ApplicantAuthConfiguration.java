@@ -93,9 +93,30 @@ public class ApplicantAuthConfiguration {
     }
 
     static void validateRuntimePolicy(ApplicantAuthProperties properties, Environment environment) {
+        if (!isManagedRuntime(environment)) {
+            return;
+        }
         if (properties.getTokenMode() == ApplicantAuthProperties.TokenMode.HMAC
                 && (properties.getTokenSecret() == null || properties.getTokenSecret().isBlank())) {
             throw new IllegalStateException("token secret is required for hmac token mode");
+        }
+        if (properties.getJdbcUrl() == null || properties.getJdbcUrl().isBlank()) {
+            throw new IllegalStateException("jdbc url is required in managed runtime profile");
+        }
+        if (properties.getJdbcPassword() == null || properties.getJdbcPassword().isBlank()) {
+            throw new IllegalStateException("jdbc password is required in managed runtime profile");
+        }
+        if (environment.getProperty("spring.data.redis.host", "").isBlank()) {
+            throw new IllegalStateException("redis host is required in managed runtime profile");
+        }
+        if (environment.getProperty("spring.data.redis.password", "").isBlank()) {
+            throw new IllegalStateException("redis password is required in managed runtime profile");
+        }
+        if (environment.getProperty("otel.exporter.otlp.traces.endpoint", "").isBlank()) {
+            throw new IllegalStateException("otlp traces endpoint is required in managed runtime profile");
+        }
+        if (environment.getProperty("otel.exporter.otlp.traces.headers", "").isBlank()) {
+            throw new IllegalStateException("otlp traces headers are required in managed runtime profile");
         }
         if (!isProd(environment)) {
             return;
@@ -106,15 +127,6 @@ public class ApplicantAuthConfiguration {
         if (properties.getRuntimeStore() != ApplicantAuthProperties.RuntimeStore.REDIS_JDBC) {
             throw new IllegalStateException("redis-jdbc runtime store is required in prod profile");
         }
-        if (properties.getJdbcUrl() == null || properties.getJdbcUrl().isBlank()) {
-            throw new IllegalStateException("jdbc url is required in prod profile");
-        }
-        if (environment.getProperty("spring.data.redis.host", "").isBlank()) {
-            throw new IllegalStateException("redis host is required in prod profile");
-        }
-        if (environment.getProperty("spring.data.redis.password", "").isBlank()) {
-            throw new IllegalStateException("redis password is required in prod profile");
-        }
         if (properties.getTokenMode() != ApplicantAuthProperties.TokenMode.HMAC) {
             throw new IllegalStateException("hmac token mode is required in prod profile");
         }
@@ -124,15 +136,14 @@ public class ApplicantAuthConfiguration {
         if (properties.getConsul().isEnabled() && properties.getConsul().getServiceAddress().isBlank()) {
             throw new IllegalStateException("consul service address is required in prod profile");
         }
-        if (environment.getProperty("otel.exporter.otlp.traces.endpoint", "").isBlank()) {
-            throw new IllegalStateException("otlp traces endpoint is required in prod profile");
-        }
-        if (environment.getProperty("otel.exporter.otlp.traces.headers", "").isBlank()) {
-            throw new IllegalStateException("otlp traces headers are required in prod profile");
-        }
     }
 
     private static boolean isProd(Environment environment) {
         return Arrays.asList(environment.getActiveProfiles()).contains("prod");
+    }
+
+    private static boolean isManagedRuntime(Environment environment) {
+        return Arrays.stream(environment.getActiveProfiles())
+                .anyMatch(profile -> profile.equals("dev-1") || profile.equals("sta-1") || profile.equals("prod"));
     }
 }

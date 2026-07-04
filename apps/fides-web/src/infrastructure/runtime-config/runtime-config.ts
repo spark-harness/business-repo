@@ -1,10 +1,11 @@
 import type { OtpAdapterMode, PublicRuntimeConfig } from "@/api/runtime-config/public-runtime-config";
+import { getFidesEnv, type FidesEnv } from "@/config/env";
+
+export { validateNoLegacyPublicEnv } from "@/config/env";
 
 export type RuntimeConfig = PublicRuntimeConfig & {
   environment: string;
   internal: {
-    consulUrl?: string;
-    consulKey: string;
     bffBaseUrl?: string;
   };
 };
@@ -21,45 +22,27 @@ type RuntimeConfigInput = Partial<{
   }>;
 }>;
 
-type LoadRuntimeConfigOptions = {
-  fetcher?: typeof fetch;
-};
-
 const DEFAULT_ENVIRONMENT = "local";
 const DEFAULT_CONFIG: RuntimeConfig = {
   environment: DEFAULT_ENVIRONMENT,
   otpAdapter: "mock",
   bffBaseUrl: "/api/v1",
   browserTracing: { headers: {} },
-  internal: {
-    consulKey: "spark/lendora/local/fides-web/runtime-config",
-  },
+  internal: {},
 };
 
-const LEGACY_PUBLIC_ENV = [
-  "NEXT_PUBLIC_FIDES_OTP_ADAPTER",
-  "NEXT_PUBLIC_FIDES_BFF_BASE_URL",
-  "NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-  "NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_HEADERS",
-] as const;
+export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
+  const env = getFidesEnv();
 
-export async function loadRuntimeConfig(options: LoadRuntimeConfigOptions = {}): Promise<RuntimeConfig> {
-  validateNoLegacyPublicEnv();
-
-  const environment = readString(process.env.FIDES_RUNTIME_ENV) ?? DEFAULT_ENVIRONMENT;
-  const consulUrl = readString(process.env.FIDES_RUNTIME_CONFIG_CONSUL_URL);
-  const consulKey =
-    readString(process.env.FIDES_RUNTIME_CONFIG_CONSUL_KEY) ??
-    `spark/lendora/${environment}/fides-web/runtime-config`;
+  const environment = env.FIDES_RUNTIME_ENV;
 
   const baseConfig: RuntimeConfig = {
     ...DEFAULT_CONFIG,
     environment,
-    internal: { consulUrl, consulKey },
+    internal: {},
   };
-  const consulConfig = await loadConsulConfig(consulUrl, consulKey, options.fetcher);
-  const envConfig = loadEnvOverrides();
-  const config = mergeRuntimeConfig(mergeRuntimeConfig(baseConfig, consulConfig), envConfig);
+  const envConfig = loadEnvOverrides(env);
+  const config = mergeRuntimeConfig(baseConfig, envConfig);
 
   validateRuntimeConfig(config);
   return config;
@@ -77,49 +60,15 @@ export function buildPublicRuntimeConfig(config: RuntimeConfig): PublicRuntimeCo
   };
 }
 
-export function validateNoLegacyPublicEnv() {
-  const present = LEGACY_PUBLIC_ENV.filter((name) => process.env[name]);
-  if (present.length > 0) {
-    throw new Error(`Legacy public runtime variables are not supported: ${present.join(", ")}`);
-  }
-}
-
-async function loadConsulConfig(
-  consulUrl: string | undefined,
-  consulKey: string,
-  fetcher: typeof fetch = fetch,
-): Promise<RuntimeConfigInput> {
-  if (!consulUrl) {
-    return {};
-  }
-
-  const response = await fetcher(`${trimTrailingSlash(consulUrl)}/v1/kv/${encodeConsulKey(consulKey)}`, {
-    cache: "no-store",
-  });
-  if (response.status === 404) {
-    return {};
-  }
-  if (!response.ok) {
-    throw new Error(`Failed to load fides runtime config from Consul: ${response.status}`);
-  }
-
-  const entries = (await response.json()) as Array<{ Value?: string }> | null;
-  const value = entries?.[0]?.Value;
-  if (!value) {
-    return {};
-  }
-  return JSON.parse(Buffer.from(value, "base64").toString("utf8")) as RuntimeConfigInput;
-}
-
-function loadEnvOverrides(): RuntimeConfigInput {
+function loadEnvOverrides(env: FidesEnv): RuntimeConfigInput {
   return {
-    otpAdapter: process.env.FIDES_OTP_ADAPTER,
+    otpAdapter: env.FIDES_OTP_ADAPTER,
     internal: {
-      bffBaseUrl: process.env.FIDES_BFF_BASE_URL,
+      bffBaseUrl: env.FIDES_BFF_BASE_URL,
     },
     browserTracing: {
-      endpoint: process.env.FIDES_BROWSER_TRACING_ENDPOINT,
-      headers: parseHeaders(process.env.FIDES_BROWSER_TRACING_HEADERS),
+      endpoint: env.FIDES_BROWSER_TRACING_ENDPOINT,
+      headers: parseHeaders(env.FIDES_BROWSER_TRACING_HEADERS),
     },
   };
 }
@@ -143,7 +92,7 @@ function mergeRuntimeConfig(config: RuntimeConfig, input: RuntimeConfigInput): R
 }
 
 function validateRuntimeConfig(config: RuntimeConfig) {
-  if (!config.bffBaseUrl) {
+  if (!config.internal.bffBaseUrl) {
     throw new Error("FIDES_BFF_BASE_URL is required");
   }
   if (config.environment === "prod" && config.otpAdapter === "real" && !config.internal.bffBaseUrl) {
@@ -167,10 +116,12 @@ function parseHeaders(raw: string | undefined): Record<string, string> | undefin
   }
   return raw.split(",").reduce<Record<string, string>>((headers, item) => {
     const index = item.indexOf("=");
-    if (index <= 0) {
-      return headers;
+    const key = index >= 0 ? item.slice(0, index).trim() : "";
+    const value = index >= 0 ? item.slice(index + 1).trim() : "";
+    if (!key || !value) {
+      throw new Error("FIDES_BROWSER_TRACING_HEADERS must use comma-separated key=value pairs");
     }
-    headers[item.slice(0, index).trim()] = item.slice(index + 1).trim();
+    headers[key] = value;
     return headers;
   }, {});
 }
@@ -189,15 +140,4 @@ function readString(value: unknown): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, "");
-}
-
-function encodeConsulKey(key: string): string {
-  return key
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/");
 }

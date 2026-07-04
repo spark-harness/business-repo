@@ -7,22 +7,23 @@ import type {
   SessionStore,
   VerifiedSession,
 } from "@/application/mobile-verification/verified-session";
+import { getSmokeEnv } from "@/config/env";
 import { RestOtpAuthGateway } from "@/infrastructure/mobile-verification/rest-otp-auth-gateway";
 
-const runRealBffSmoke = process.env.LEN43_REAL_BFF_SMOKE === "1";
-const describeSmoke = runRealBffSmoke ? describe : describe.skip;
+const smokeEnv = getSmokeEnv();
+const describeSmoke = smokeEnv.realBffSmoke ? describe : describe.skip;
 
 describeSmoke("mobile verification real BFF smoke", () => {
   it("sends and verifies OTP through the running fides-bff and applicant-api", async () => {
     const sessionStore = new MemorySessionStore();
     const flowController = new MemoryFlowController();
     const controller = createMobileVerificationController(
-      new RestOtpAuthGateway(process.env.LEN43_FIDES_BFF_BASE_URL ?? "http://127.0.0.1:8001/api/v1"),
+      new RestOtpAuthGateway(smokeEnv.fidesBffBaseUrl ?? "http://127.0.0.1:8001/api/v1"),
       new UserIntentIdempotencyKeys(),
       sessionStore,
       flowController,
     );
-    const phone = process.env.LEN43_SMOKE_PHONE ?? "91989999";
+    const phone = smokeEnv.smokePhone;
 
     const sent = await controller.sendOtp({ countryCode: "+852", phone });
     expect(sent).toMatchObject({ ok: true });

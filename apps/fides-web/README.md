@@ -26,18 +26,15 @@ pnpm dev
 `fides` 镜像构建不需要 OTP adapter、BFF base URL 或浏览器 tracing endpoint/header。环境差异配置按以下顺序在服务端运行时合并：
 
 1. 默认值。
-2. Consul JSON，默认 key 为 `spark/lendora/{FIDES_RUNTIME_ENV}/fides-web/runtime-config`。
-3. 运行时环境变量或 Next 已加载的 `.env*`。
+2. 运行时环境变量或 Next 已加载的 `.env*`。
 
 支持的运行时变量：
 
 | Variable | Purpose |
 |---|---|
 | `FIDES_RUNTIME_ENV` | 当前环境名，默认 `local` |
-| `FIDES_RUNTIME_CONFIG_CONSUL_URL` | Consul HTTP base URL |
-| `FIDES_RUNTIME_CONFIG_CONSUL_KEY` | Consul KV key |
 | `FIDES_OTP_ADAPTER` | `real`、`mock` 或 `disabled` |
-| `FIDES_BFF_BASE_URL` | 浏览器访问 `fides-bff` 的 base URL |
+| `FIDES_BFF_BASE_URL` | 服务端代理访问 `fides-bff` 的内部 base URL |
 | `FIDES_BROWSER_TRACING_ENDPOINT` | Browser OTLP traces endpoint，留空关闭导出 |
 | `FIDES_BROWSER_TRACING_HEADERS` | Browser OTLP traces public headers，格式为 `k=v,k2=v2` |
 

@@ -22,7 +22,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
             "spark.applicant.auth.jdbc-password=",
             "spark.applicant.auth.migrations-enabled=true",
             "spark.applicant.auth.consul.enabled=false",
-            "spring.data.redis.host=localhost"
+            "spring.data.redis.host=localhost",
+            "spring.data.redis.password=forest_dev_password"
         })
 class RedisJdbcApplicationWiringTest {
     @Autowired

@@ -3,21 +3,7 @@ spring:
     name: origination-api
   config:
     import:
-      - "optional:consul:"
       - "optional:file:.env[.properties]"
-  cloud:
-    consul:
-      enabled: false
-      host: ${SPRING_CLOUD_CONSUL_HOST:localhost}
-      port: ${SPRING_CLOUD_CONSUL_PORT:8500}
-      config:
-        enabled: false
-        format: yaml
-        prefix: ${SPRING_CLOUD_CONSUL_CONFIG_PREFIX:spark/lendora/${SPRING_PROFILES_ACTIVE:local}}
-        name: origination-api
-        data-key: config
-        watch:
-          enabled: false
 
 management:
   health:
@@ -58,6 +44,6 @@ spark:
       service-name: ${SPARK_ORIGINATION_CONSUL_SERVICE_NAME:origination-api}
       service-address: ${SPARK_ORIGINATION_CONSUL_SERVICE_ADDRESS:127.0.0.1}
       http-port: ${SPARK_ORIGINATION_CONSUL_HTTP_PORT:8080}
-      grpc-port: ${SPARK_ORIGINATION_CONSUL_GRPC_PORT:9091}
+      grpc-port: ${SPARK_ORIGINATION_CONSUL_GRPC_PORT:9090}
       health-check-url: ${SPARK_ORIGINATION_CONSUL_HEALTH_CHECK_URL:}
       health-check-path: ${SPARK_ORIGINATION_CONSUL_HEALTH_CHECK_PATH:/ready}

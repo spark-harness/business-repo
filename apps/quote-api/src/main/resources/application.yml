@@ -3,21 +3,7 @@ spring:
     name: quote-api
   config:
     import:
-      - "optional:consul:"
       - "optional:file:.env[.properties]"
-  cloud:
-    consul:
-      enabled: false
-      host: ${SPRING_CLOUD_CONSUL_HOST:localhost}
-      port: ${SPRING_CLOUD_CONSUL_PORT:8500}
-      config:
-        enabled: false
-        format: yaml
-        prefix: ${SPRING_CLOUD_CONSUL_CONFIG_PREFIX:spark/lendora/${SPRING_PROFILES_ACTIVE:local}}
-        name: quote-api
-        data-key: config
-        watch:
-          enabled: false
 
 management:
   health:

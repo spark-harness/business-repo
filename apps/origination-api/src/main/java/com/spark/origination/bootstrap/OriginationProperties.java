@@ -66,7 +66,7 @@ public class OriginationProperties {
         private String serviceName = "origination-api";
         private String serviceAddress = "127.0.0.1";
         private int httpPort = 8080;
-        private int grpcPort = 9091;
+        private int grpcPort = 9090;
         private String healthCheckUrl = "";
         private String healthCheckPath = "/ready";
         private String interval = "10s";

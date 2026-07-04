@@ -18,6 +18,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags "-s -w -X main.Version=
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=build /out/fides-bff /app/fides-bff
-COPY apps/fides-bff/configs/config.yaml /app/configs/config.yaml
+COPY apps/fides-bff/configs /app/configs
 EXPOSE 8000
 ENTRYPOINT ["/app/fides-bff", "-conf", "/app/configs/config.yaml"]

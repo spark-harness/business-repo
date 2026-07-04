@@ -1,60 +1,61 @@
 server:
   http:
-    network: tcp
-    addr: 0.0.0.0:8000
+    network: "${SERVER_HTTP_NETWORK:tcp}"
+    addr: "${SERVER_HTTP_ADDR:0.0.0.0:8000}"
   cors:
     allowed_origins:
-      - http://localhost:3000
-      - http://localhost:3001
-      - http://127.0.0.1:3000
-      - http://127.0.0.1:3001
+      - "${SERVER_CORS_ALLOWED_ORIGIN_0:http://localhost:3000}"
+      - "${SERVER_CORS_ALLOWED_ORIGIN_1:http://localhost:3001}"
+      - "${SERVER_CORS_ALLOWED_ORIGIN_2:http://127.0.0.1:3000}"
+      - "${SERVER_CORS_ALLOWED_ORIGIN_3:http://127.0.0.1:3001}"
 applicant:
   consul:
-    address: 127.0.0.1:8500
-    scheme: http
-    service_name: applicant-api
+    address: "${APPLICANT_CONSUL_ADDRESS:127.0.0.1:8500}"
+    scheme: "${APPLICANT_CONSUL_SCHEME:http}"
+    service_name: "${APPLICANT_CONSUL_SERVICE_NAME:applicant-api}"
   grpc:
-    timeout: 3s
-    plaintext: true
+    timeout: "${APPLICANT_GRPC_TIMEOUT:3s}"
+    plaintext: "${APPLICANT_GRPC_PLAINTEXT:true}"
 quote:
   consul:
-    address: 127.0.0.1:8500
-    scheme: http
-    service_name: quote-api
+    address: "${QUOTE_CONSUL_ADDRESS:127.0.0.1:8500}"
+    scheme: "${QUOTE_CONSUL_SCHEME:http}"
+    service_name: "${QUOTE_CONSUL_SERVICE_NAME:quote-api}"
   http:
-    base_url: ""
-    timeout: 3s
+    base_url: "${QUOTE_HTTP_BASE_URL:}"
+    timeout: "${QUOTE_HTTP_TIMEOUT:3s}"
 origination:
   consul:
-    address: 127.0.0.1:8500
-    scheme: http
-    service_name: origination-api
+    address: "${ORIGINATION_CONSUL_ADDRESS:127.0.0.1:8500}"
+    scheme: "${ORIGINATION_CONSUL_SCHEME:http}"
+    service_name: "${ORIGINATION_CONSUL_SERVICE_NAME:origination-api}"
   http:
-    base_url: ""
-    timeout: 3s
+    base_url: "${ORIGINATION_HTTP_BASE_URL:}"
+    timeout: "${ORIGINATION_HTTP_TIMEOUT:3s}"
 auth:
-  token_mode: hmac
-  token_secret: local-dev-token-secret
-  access_token_ttl: 1h
+  token_mode: "${AUTH_TOKEN_MODE:hmac}"
+  token_secret: "${AUTH_TOKEN_SECRET:}"
+  access_token_ttl: "${AUTH_ACCESS_TOKEN_TTL:1h}"
 registry:
   consul:
-    enabled: true
-    address: 127.0.0.1:8500
-    scheme: http
-    service_name: fides-bff
-    discovery_addr: 127.0.0.1:8000
-    heartbeat: true
-    health_check: true
-    health_check_interval_sec: 10
-    deregister_after_sec: 60
+    enabled: "${REGISTRY_CONSUL_ENABLED:true}"
+    address: "${REGISTRY_CONSUL_ADDRESS:127.0.0.1:8500}"
+    scheme: "${REGISTRY_CONSUL_SCHEME:http}"
+    service_name: "${REGISTRY_CONSUL_SERVICE_NAME:fides-bff}"
+    discovery_addr: "${REGISTRY_CONSUL_DISCOVERY_ADDR:127.0.0.1:8000}"
+    heartbeat: "${REGISTRY_CONSUL_HEARTBEAT:true}"
+    health_check: "${REGISTRY_CONSUL_HEALTH_CHECK:true}"
+    health_check_interval_sec: "${REGISTRY_CONSUL_HEALTH_CHECK_INTERVAL_SEC:10}"
+    deregister_after_sec: "${REGISTRY_CONSUL_DEREGISTER_AFTER_SEC:60}"
     metadata:
-      module: frontend
+      module: "${REGISTRY_CONSUL_METADATA_MODULE:frontend}"
 observability:
   otel:
-    enabled: false
-    exporter: otlp
-    endpoint: ""
-    protocol: http/protobuf
-    headers: {}
-    environment: local
-    release: dev
+    enabled: "${OBSERVABILITY_OTEL_ENABLED:false}"
+    exporter: "${OBSERVABILITY_OTEL_EXPORTER:otlp}"
+    endpoint: "${OBSERVABILITY_OTEL_ENDPOINT:}"
+    protocol: "${OBSERVABILITY_OTEL_PROTOCOL:http/protobuf}"
+    headers:
+      x-sentry-auth: "${OBSERVABILITY_OTEL_X_SENTRY_AUTH:}"
+    environment: "${OBSERVABILITY_OTEL_ENVIRONMENT:local}"
+    release: "${OBSERVABILITY_OTEL_RELEASE:dev}"
