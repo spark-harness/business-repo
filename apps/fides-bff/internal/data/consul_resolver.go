@@ -21,6 +21,15 @@ type ConsulResolver struct {
 	client      *http.Client
 }
 
+type staticURLResolver string
+
+func (r staticURLResolver) Resolve(context.Context) (string, error) {
+	if strings.TrimSpace(string(r)) == "" {
+		return "", errors.New("service URL is empty")
+	}
+	return string(r), nil
+}
+
 func NewConsulResolver(c *conf.Applicant) *ConsulResolver {
 	consul := conf.Consul{}
 	if c != nil {

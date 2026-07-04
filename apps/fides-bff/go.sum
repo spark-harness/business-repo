@@ -193,6 +193,8 @@ github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPx
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
 github.com/spark-harness/idl-go-repo v0.2.5 h1:4X5mw3RWxAf/Zy/MRQT7HLY4SeolKnPBhip0GacAjbA=
 github.com/spark-harness/idl-go-repo v0.2.5/go.mod h1:p3j/vCU9+fdKr1l4zY3v+BUBDugysiySPeg1qBZ6hDE=
+github.com/spark-harness/idl-go-repo v0.2.6 h1:BbUJnwdTYIqQazyeLEDm9ceVkcDgH+4ZPVKub4UZZug=
+github.com/spark-harness/idl-go-repo v0.2.6/go.mod h1:p3j/vCU9+fdKr1l4zY3v+BUBDugysiySPeg1qBZ6hDE=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.5.0 h1:1zr/of2m5FGMsad5YfcqgdqdWrIhu+EBEJRhR1U7z/c=

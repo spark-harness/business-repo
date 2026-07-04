@@ -21,9 +21,9 @@ quote:
     address: "${QUOTE_CONSUL_ADDRESS:127.0.0.1:8500}"
     scheme: "${QUOTE_CONSUL_SCHEME:http}"
     service_name: "${QUOTE_CONSUL_SERVICE_NAME:quote-api}"
-  http:
-    base_url: "${QUOTE_HTTP_BASE_URL:}"
-    timeout: "${QUOTE_HTTP_TIMEOUT:3s}"
+  grpc:
+    timeout: "${QUOTE_GRPC_TIMEOUT:3s}"
+    plaintext: "${QUOTE_GRPC_PLAINTEXT:true}"
 origination:
   consul:
     address: "${ORIGINATION_CONSUL_ADDRESS:127.0.0.1:8500}"
