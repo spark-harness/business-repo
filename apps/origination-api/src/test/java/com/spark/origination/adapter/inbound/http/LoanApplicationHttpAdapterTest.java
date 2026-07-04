@@ -2,19 +2,20 @@ package com.spark.origination.adapter.inbound.http;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.spark.origination.application.QuoteExpiredException;
+import com.spark.origination.application.QuoteGateway;
 import com.spark.origination.bootstrap.OriginationApiApplication;
-import com.sun.net.httpserver.HttpServer;
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
+import com.spark.origination.domain.AcceptedQuote;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -24,49 +25,20 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 @SpringBootTest(
-        classes = OriginationApiApplication.class,
+        classes = {OriginationApiApplication.class, LoanApplicationHttpAdapterTest.QuoteGatewayTestConfiguration.class},
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "spark.grpc.server.enabled=false")
 class LoanApplicationHttpAdapterTest {
-    private static HttpServer quoteServer;
-
     @LocalServerPort
     private int port;
 
     private final TestRestTemplate restTemplate = new TestRestTemplate();
-
-    @BeforeAll
-    static void startQuoteServer() throws IOException {
-        quoteServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        quoteServer.createContext("/internal/v1/pricing/quotes/quote_1", exchange -> {
-            String applicantId = exchange.getRequestHeaders().getFirst("x-applicant-id");
-            if (!"applicant_001".equals(applicantId)) {
-                exchange.sendResponseHeaders(403, -1);
-                exchange.close();
-                return;
-            }
-            respond(exchange, 200, quoteBody("quote_1", "100000.00", 12));
-        });
-        quoteServer.createContext("/internal/v1/pricing/quotes/quote_2", exchange ->
-                respond(exchange, 200, quoteBody("quote_2", "120000.00", 24)));
-        quoteServer.createContext("/internal/v1/pricing/quotes/quote_expired", exchange ->
-                exchange.sendResponseHeaders(410, -1));
-        quoteServer.start();
-    }
-
-    @AfterAll
-    static void stopQuoteServer() {
-        if (quoteServer != null) {
-            quoteServer.stop(0);
-        }
-    }
 
     @DynamicPropertySource
     static void configure(DynamicPropertyRegistry registry) {
         registry.add(
                 "spark.origination.jdbc-url",
                 () -> "jdbc:h2:mem:origination-http;MODE=PostgreSQL;DB_CLOSE_DELAY=-1");
-        registry.add("spark.origination.quote-api-base-url", () -> "http://127.0.0.1:" + quoteServer.getAddress().getPort());
     }
 
     @Test
@@ -165,28 +137,34 @@ class LoanApplicationHttpAdapterTest {
         return new HttpEntity<>(body, headers);
     }
 
-    private static String quoteBody(String quoteId, String amount, int term) {
-        return """
-                {
-                  "quoteId": "%s",
-                  "productCode": "PIL",
-                  "amount": "%s",
-                  "term": %d,
-                  "purpose": "debt_consolidation",
-                  "monthly": "8560.75",
-                  "apr": "0.0520",
-                  "totalInterest": "2729.00",
-                  "totalPayable": "102729.00",
-                  "validUntil": "%s"
+    @TestConfiguration
+    static class QuoteGatewayTestConfiguration {
+        @Bean
+        @Primary
+        QuoteGateway testQuoteGateway() {
+            return quoteId -> {
+                if ("quote_expired".equals(quoteId)) {
+                    throw new QuoteExpiredException();
                 }
-                """.formatted(quoteId, amount, term, Instant.now().plusSeconds(3600));
-    }
+                if ("quote_2".equals(quoteId)) {
+                    return quote("quote_2", "applicant_001", "120000.00", 24);
+                }
+                return quote("quote_1", "applicant_001", "100000.00", 12);
+            };
+        }
 
-    private static void respond(com.sun.net.httpserver.HttpExchange exchange, int status, String body) throws IOException {
-        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(status, bytes.length);
-        exchange.getResponseBody().write(bytes);
-        exchange.close();
+        private static AcceptedQuote quote(String quoteId, String applicantId, String amount, int term) {
+            return new AcceptedQuote(
+                    quoteId,
+                    applicantId,
+                    new BigDecimal(amount),
+                    term,
+                    "debt_consolidation",
+                    new BigDecimal("8560.75"),
+                    new BigDecimal("0.0520"),
+                    new BigDecimal("2729.00"),
+                    new BigDecimal("102729.00"),
+                    Instant.now().plusSeconds(3600));
+        }
     }
 }
