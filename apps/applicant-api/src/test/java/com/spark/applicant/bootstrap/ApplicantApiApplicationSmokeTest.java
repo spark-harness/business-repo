@@ -20,7 +20,8 @@ import org.springframework.http.ResponseEntity;
             "spark.grpc.server.enabled=false",
             "spark.applicant.auth.runtime-store=in-memory",
             "spark.applicant.auth.token-mode=simple",
-            "spark.applicant.auth.consul.enabled=false"
+            "spark.applicant.auth.consul.enabled=false",
+            "management.health.redis.enabled=false"
         })
 class ApplicantApiApplicationSmokeTest {
     @LocalServerPort
