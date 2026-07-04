@@ -47,3 +47,6 @@ spark:
       grpc-port: ${SPARK_ORIGINATION_CONSUL_GRPC_PORT:9090}
       health-check-url: ${SPARK_ORIGINATION_CONSUL_HEALTH_CHECK_URL:}
       health-check-path: ${SPARK_ORIGINATION_CONSUL_HEALTH_CHECK_PATH:/ready}
+  grpc:
+    server:
+      port: ${SPARK_GRPC_SERVER_PORT:9090}

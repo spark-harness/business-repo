@@ -55,6 +55,7 @@ class OriginationConfigurationModelTest {
         assertThat(applicationYaml).contains("url: ${SPARK_ORIGINATION_CONSUL_URL:http://localhost:8500}");
         assertThat(applicationYaml).contains("service-address: ${SPARK_ORIGINATION_CONSUL_SERVICE_ADDRESS:127.0.0.1}");
         assertThat(applicationYaml).contains("grpc-port: ${SPARK_ORIGINATION_CONSUL_GRPC_PORT:9090}");
+        assertThat(applicationYaml).contains("port: ${SPARK_GRPC_SERVER_PORT:9090}");
         assertThat(ConsulServiceRegistration.class).isNotNull();
     }
 
