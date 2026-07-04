@@ -78,7 +78,7 @@ public class ConsulServiceRegistration implements ApplicationRunner, RuntimeDepe
                 consul.getServiceName(),
                 consul.getServiceAddress(),
                 consul.getHttpPort(),
-                Map.of(),
+                Map.of("grpc_port", Integer.toString(consul.getGrpcPort())),
                 new HealthCheck(healthCheckUrl(consul), consul.getInterval(), consul.getTimeout()));
     }
 

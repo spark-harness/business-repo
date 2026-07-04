@@ -42,6 +42,22 @@ class RequestPrincipalGrpcServerInterceptorTest {
 
         assertThat(handler.called).isFalse();
         assertThat(call.closedStatus.getCode()).isEqualTo(Status.Code.UNAUTHENTICATED);
+        assertThat(call.closedStatus.getDescription()).isEqualTo("request principal is required");
+        assertThat(RequestPrincipalContext.current()).isEmpty();
+    }
+
+    @Test
+    void interceptCall_withCustomUnauthenticatedDescription_closesWithCustomDescription() {
+        RequestPrincipalGrpcServerInterceptor customInterceptor =
+                new RequestPrincipalGrpcServerInterceptor("QUOTE-AUTH-0001");
+        RecordingServerCall call = new RecordingServerCall();
+        RecordingHandler handler = new RecordingHandler();
+
+        customInterceptor.interceptCall(call, new Metadata(), handler);
+
+        assertThat(handler.called).isFalse();
+        assertThat(call.closedStatus.getCode()).isEqualTo(Status.Code.UNAUTHENTICATED);
+        assertThat(call.closedStatus.getDescription()).isEqualTo("QUOTE-AUTH-0001");
         assertThat(RequestPrincipalContext.current()).isEmpty();
     }
 

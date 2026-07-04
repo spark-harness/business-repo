@@ -57,6 +57,7 @@ public class QuoteProperties {
         private String serviceName = "quote-api";
         private String serviceAddress = "127.0.0.1";
         private int httpPort = 8080;
+        private int grpcPort = 9090;
         private String healthCheckUrl = "";
         private String healthCheckPath = "/ready";
         private String interval = "10s";
@@ -100,6 +101,14 @@ public class QuoteProperties {
 
         public void setHttpPort(int httpPort) {
             this.httpPort = httpPort;
+        }
+
+        public int getGrpcPort() {
+            return grpcPort;
+        }
+
+        public void setGrpcPort(int grpcPort) {
+            this.grpcPort = grpcPort;
         }
 
         public String getHealthCheckUrl() {
