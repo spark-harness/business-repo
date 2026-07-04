@@ -13,6 +13,7 @@ class ConsulServiceRegistrationTest {
         properties.getConsul().setServiceName("quote-api");
         properties.getConsul().setServiceAddress("quote-api.lendora-sta-quote-api.svc.cluster.local");
         properties.getConsul().setHttpPort(80);
+        properties.getConsul().setGrpcPort(9090);
         properties.getConsul().setHealthCheckUrl(
                 "http://quote-api.lendora-sta-quote-api.svc.cluster.local:80/ready");
 
@@ -24,7 +25,7 @@ class ConsulServiceRegistrationTest {
         assertThat(request.name()).isEqualTo("quote-api");
         assertThat(request.address()).isEqualTo("quote-api.lendora-sta-quote-api.svc.cluster.local");
         assertThat(request.port()).isEqualTo(80);
-        assertThat(request.meta()).isEmpty();
+        assertThat(request.meta()).containsEntry("grpc_port", "9090");
         assertThat(request.check().http()).isEqualTo(
                 "http://quote-api.lendora-sta-quote-api.svc.cluster.local:80/ready");
     }

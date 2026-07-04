@@ -13,7 +13,8 @@ import org.springframework.boot.test.context.SpringBootTest;
             "spark.quote.consul.enabled=false",
             "spark.quote.jdbc-url=jdbc:h2:mem:quote-wiring;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
             "spark.quote.jdbc-username=sa",
-            "spark.quote.jdbc-password="
+            "spark.quote.jdbc-password=",
+            "spark.grpc.server.port=0"
         })
 class QuoteApplicationWiringTest {
     @Autowired

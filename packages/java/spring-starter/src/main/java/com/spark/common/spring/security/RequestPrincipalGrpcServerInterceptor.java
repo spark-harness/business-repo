@@ -10,13 +10,22 @@ import io.grpc.Status;
 public class RequestPrincipalGrpcServerInterceptor implements ServerInterceptor {
     public static final Metadata.Key<String> APPLICANT_ID_METADATA_KEY =
             Metadata.Key.of("x-applicant-id", Metadata.ASCII_STRING_MARSHALLER);
+    private final String unauthenticatedDescription;
+
+    public RequestPrincipalGrpcServerInterceptor() {
+        this("request principal is required");
+    }
+
+    public RequestPrincipalGrpcServerInterceptor(String unauthenticatedDescription) {
+        this.unauthenticatedDescription = unauthenticatedDescription;
+    }
 
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
             ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
         String applicantId = headers.get(APPLICANT_ID_METADATA_KEY);
         if (applicantId == null || applicantId.isBlank()) {
-            call.close(Status.UNAUTHENTICATED.withDescription("request principal is required"), new Metadata());
+            call.close(Status.UNAUTHENTICATED.withDescription(unauthenticatedDescription), new Metadata());
             return new ServerCall.Listener<>() {};
         }
 

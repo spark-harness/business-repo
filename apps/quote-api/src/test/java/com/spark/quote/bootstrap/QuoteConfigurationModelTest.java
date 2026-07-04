@@ -55,6 +55,7 @@ class QuoteConfigurationModelTest {
         assertThat(applicationYaml).contains("enabled: ${SPARK_QUOTE_CONSUL_ENABLED:false}");
         assertThat(applicationYaml).contains("url: ${SPARK_QUOTE_CONSUL_URL:http://localhost:8500}");
         assertThat(applicationYaml).contains("service-address: ${SPARK_QUOTE_CONSUL_SERVICE_ADDRESS:127.0.0.1}");
+        assertThat(applicationYaml).contains("grpc-port: ${SPARK_QUOTE_CONSUL_GRPC_PORT:9090}");
         assertThat(ConsulServiceRegistration.class).isNotNull();
     }
 
