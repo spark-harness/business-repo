@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -152,51 +151,6 @@ observability:
 	if !strings.Contains(err.Error(), "AUTH_TOKEN_SECRET") {
 		t.Fatalf("error = %v", err)
 	}
-}
-
-func minimalConfig(addr string) string {
-	return fmt.Sprintf(`
-server:
-  http:
-    network: tcp
-    addr: %s
-applicant:
-  consul:
-    address: 127.0.0.1:8500
-    scheme: http
-    service_name: applicant-api
-  grpc:
-    timeout: 3s
-    plaintext: true
-quote:
-  consul:
-    address: 127.0.0.1:8500
-    scheme: http
-    service_name: quote-api
-  http:
-    base_url: ""
-    timeout: 3s
-origination:
-  consul:
-    address: 127.0.0.1:8500
-    scheme: http
-    service_name: origination-api
-  http:
-    base_url: ""
-    timeout: 3s
-registry:
-  consul:
-    enabled: false
-observability:
-  otel:
-    enabled: false
-    exporter: otlp
-    endpoint: ""
-    protocol: http/protobuf
-    headers: {}
-    environment: local
-    release: dev
-`, addr)
 }
 
 func placeholderConfig() string {
