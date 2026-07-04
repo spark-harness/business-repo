@@ -8,8 +8,8 @@ public class OriginationProperties {
     private String jdbcUrl = "jdbc:h2:mem:origination;MODE=PostgreSQL;DB_CLOSE_DELAY=-1";
     private String jdbcUsername = "sa";
     private String jdbcPassword = "";
-    private String quoteApiBaseUrl = "http://localhost:8080";
-    private Duration quoteApiTimeout = Duration.ofSeconds(3);
+    private String quoteApiGrpcTarget = "localhost:9090";
+    private Duration quoteApiGrpcTimeout = Duration.ofSeconds(3);
     private Consul consul = new Consul();
 
     public String getJdbcUrl() {
@@ -36,20 +36,20 @@ public class OriginationProperties {
         this.jdbcPassword = jdbcPassword;
     }
 
-    public String getQuoteApiBaseUrl() {
-        return quoteApiBaseUrl;
+    public String getQuoteApiGrpcTarget() {
+        return quoteApiGrpcTarget;
     }
 
-    public void setQuoteApiBaseUrl(String quoteApiBaseUrl) {
-        this.quoteApiBaseUrl = quoteApiBaseUrl;
+    public void setQuoteApiGrpcTarget(String quoteApiGrpcTarget) {
+        this.quoteApiGrpcTarget = quoteApiGrpcTarget;
     }
 
-    public Duration getQuoteApiTimeout() {
-        return quoteApiTimeout;
+    public Duration getQuoteApiGrpcTimeout() {
+        return quoteApiGrpcTimeout;
     }
 
-    public void setQuoteApiTimeout(Duration quoteApiTimeout) {
-        this.quoteApiTimeout = quoteApiTimeout;
+    public void setQuoteApiGrpcTimeout(Duration quoteApiGrpcTimeout) {
+        this.quoteApiGrpcTimeout = quoteApiGrpcTimeout;
     }
 
     public Consul getConsul() {

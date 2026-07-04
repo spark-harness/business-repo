@@ -1,6 +1,5 @@
 package com.spark.origination.bootstrap;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spark.origination.application.AdvanceApplicationStepUseCase;
 import com.spark.origination.application.CreateLoanApplicationUseCase;
 import com.spark.origination.application.GetLoanApplicationUseCase;
@@ -8,12 +7,16 @@ import com.spark.origination.application.IdempotencyRepository;
 import com.spark.origination.application.LoanApplicationRepository;
 import com.spark.origination.application.PatchLoanApplicationUseCase;
 import com.spark.origination.application.QuoteGateway;
-import com.spark.origination.infrastructure.HttpQuoteGateway;
+import com.spark.origination.infrastructure.GrpcQuoteGateway;
+import com.vesta.lendora.quote.v1.QuoteServiceGrpc;
 import com.zaxxer.hikari.HikariDataSource;
-import java.net.http.HttpClient;
+import io.opentelemetry.api.OpenTelemetry;
 import java.time.Clock;
 import javax.sql.DataSource;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import org.flywaydb.core.Flyway;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.flyway.FlywayMigrationInitializer;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -27,17 +30,25 @@ public class OriginationConfiguration {
         return Clock.systemUTC();
     }
 
-    @Bean
-    HttpClient httpClient(OriginationProperties properties) {
-        return HttpClient.newBuilder()
-                .connectTimeout(properties.getQuoteApiTimeout())
+    @Bean(destroyMethod = "shutdown")
+    ManagedChannel quoteApiChannel(OriginationProperties properties) {
+        return ManagedChannelBuilder.forTarget(properties.getQuoteApiGrpcTarget())
+                .usePlaintext()
                 .build();
     }
 
     @Bean
-    QuoteGateway quoteGateway(HttpClient httpClient, OriginationProperties properties, ObjectMapper objectMapper) {
-        return new HttpQuoteGateway(
-                httpClient, properties.getQuoteApiBaseUrl(), properties.getQuoteApiTimeout(), objectMapper);
+    QuoteServiceGrpc.QuoteServiceBlockingStub quoteServiceBlockingStub(ManagedChannel quoteApiChannel) {
+        return QuoteServiceGrpc.newBlockingStub(quoteApiChannel);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(QuoteGateway.class)
+    QuoteGateway quoteGateway(
+            QuoteServiceGrpc.QuoteServiceBlockingStub quoteStub,
+            OriginationProperties properties,
+            OpenTelemetry openTelemetry) {
+        return new GrpcQuoteGateway(quoteStub, properties.getQuoteApiGrpcTimeout(), openTelemetry);
     }
 
     @Bean

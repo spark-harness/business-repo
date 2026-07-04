@@ -46,11 +46,15 @@ class OriginationConfigurationModelTest {
     }
 
     @Test
-    void applicationYaml_whenLoaded_shouldRetainCanonicalEnvPlaceholdersAndSelfRegistration() throws IOException {
+    void applicationYaml_whenLoaded_shouldRetainCanonicalEnvPlaceholdersSelfRegistrationAndGrpcQuoteConfig()
+            throws IOException {
         String applicationYaml = resourceText("application.yml");
 
         assertThat(applicationYaml).contains("jdbc-url: ${ORIGINATION_JDBC_URL:");
-        assertThat(applicationYaml).contains("quote-api-base-url: ${ORIGINATION_QUOTE_API_BASE_URL:");
+        assertThat(applicationYaml).contains("quote-api-grpc-target: ${ORIGINATION_QUOTE_API_GRPC_TARGET:");
+        assertThat(applicationYaml).contains("quote-api-grpc-timeout: ${ORIGINATION_QUOTE_API_GRPC_TIMEOUT:");
+        assertThat(applicationYaml).doesNotContain("ORIGINATION_QUOTE_API_BASE_URL");
+        assertThat(applicationYaml).doesNotContain("quote-api-base-url");
         assertThat(applicationYaml).contains("enabled: ${SPARK_ORIGINATION_CONSUL_ENABLED:false}");
         assertThat(applicationYaml).contains("url: ${SPARK_ORIGINATION_CONSUL_URL:http://localhost:8500}");
         assertThat(applicationYaml).contains("service-address: ${SPARK_ORIGINATION_CONSUL_SERVICE_ADDRESS:127.0.0.1}");
@@ -73,17 +77,17 @@ class OriginationConfigurationModelTest {
         environment.getPropertySources().addLast(new MapPropertySource(
                 "application.yml",
                 Map.of(
-                        "spark.origination.quote-api-base-url",
-                        "http://quote.default.example")));
+                        "spark.origination.quote-api-grpc-target",
+                        "quote.default.example:9090")));
         environment.getPropertySources().addFirst(new MapPropertySource(
                 "consul:origination-api",
                 Map.of(
-                        "spark.origination.quote-api-base-url",
-                        "http://quote.consul.example")));
+                        "spark.origination.quote-api-grpc-target",
+                        "quote.consul.example:9090")));
 
         OriginationProperties consulProperties = bindProperties(environment);
 
-        assertThat(consulProperties.getQuoteApiBaseUrl()).isEqualTo("http://quote.consul.example");
+        assertThat(consulProperties.getQuoteApiGrpcTarget()).isEqualTo("quote.consul.example:9090");
     }
 
     private static String resourceText(String path) throws IOException {

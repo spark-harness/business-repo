@@ -36,8 +36,8 @@ spark:
     jdbc-url: ${ORIGINATION_JDBC_URL:jdbc:h2:mem:origination;MODE=PostgreSQL;DB_CLOSE_DELAY=-1}
     jdbc-username: ${ORIGINATION_JDBC_USERNAME:sa}
     jdbc-password: ${ORIGINATION_JDBC_PASSWORD:}
-    quote-api-base-url: ${ORIGINATION_QUOTE_API_BASE_URL:http://localhost:8080}
-    quote-api-timeout: ${ORIGINATION_QUOTE_API_TIMEOUT:3s}
+    quote-api-grpc-target: ${ORIGINATION_QUOTE_API_GRPC_TARGET:localhost:9090}
+    quote-api-grpc-timeout: ${ORIGINATION_QUOTE_API_GRPC_TIMEOUT:3s}
     consul:
       enabled: ${SPARK_ORIGINATION_CONSUL_ENABLED:false}
       url: ${SPARK_ORIGINATION_CONSUL_URL:http://localhost:8500}

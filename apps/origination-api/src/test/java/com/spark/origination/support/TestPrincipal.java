@@ -16,4 +16,14 @@ public final class TestPrincipal {
             throw new IllegalStateException(error);
         }
     }
+
+    public static void clear() {
+        try {
+            Method method = RequestPrincipalContext.class.getDeclaredMethod("clear");
+            method.setAccessible(true);
+            method.invoke(null);
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException(error);
+        }
+    }
 }
