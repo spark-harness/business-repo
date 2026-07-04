@@ -25,20 +25,12 @@ func (s *PricingService) CreateQuote(ctx context.Context, req *fidesbffv1pb.Fide
 	if !ok {
 		return nil, bffkit.UnauthorizedError()
 	}
-	headers := requestHeaders(ctx)
-	raw, err := marshalCreateQuoteRequest(req)
-	if err != nil {
-		return nil, err
-	}
 	result, err := s.uc.CreateQuote(ctx, biz.CreateQuoteCommand{
 		ApplicantID: principal.ApplicantID,
 		ProductCode: req.GetProductCode(),
 		Amount:      json.RawMessage(quoteAmountRaw(req.GetAmount())),
 		Term:        int(req.GetTerm()),
 		Purpose:     req.GetPurpose(),
-		TraceParent: headers.Get(bffkit.HeaderTraceParent),
-		TraceState:  headers.Get(bffkit.HeaderTraceState),
-		RawRequest:  raw,
 	})
 	if err != nil {
 		return nil, pricingHTTPError(err)
@@ -51,24 +43,6 @@ func (s *PricingService) CreateQuote(ctx context.Context, req *fidesbffv1pb.Fide
 		TotalPayable:  result.TotalPayable,
 		ValidUntil:    result.ValidUntil,
 	}, nil
-}
-
-func marshalCreateQuoteRequest(req *fidesbffv1pb.FidesBffPricingServiceCreateQuoteRequest) (json.RawMessage, error) {
-	raw, err := json.Marshal(struct {
-		ProductCode string `json:"productCode"`
-		Amount      string `json:"amount"`
-		Term        int32  `json:"term"`
-		Purpose     string `json:"purpose"`
-	}{
-		ProductCode: req.GetProductCode(),
-		Amount:      req.GetAmount(),
-		Term:        req.GetTerm(),
-		Purpose:     req.GetPurpose(),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return raw, nil
 }
 
 func quoteAmountRaw(amount string) []byte {

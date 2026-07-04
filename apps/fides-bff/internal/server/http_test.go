@@ -308,7 +308,7 @@ func TestHTTPServer_PricingQuote_rejectsInvalidToken(t *testing.T) {
 	}
 }
 
-func TestHTTPServer_PricingQuote_callsQuoteAPIWithPrincipalAndTrace(t *testing.T) {
+func TestHTTPServer_PricingQuote_callsQuoteAPIWithPrincipal(t *testing.T) {
 	quoteClient := &fakeQuoteClient{
 		result: biz.QuoteResult{
 			QuoteID:       "quote_123",
@@ -338,12 +338,6 @@ func TestHTTPServer_PricingQuote_callsQuoteAPIWithPrincipalAndTrace(t *testing.T
 	}
 	if quoteClient.command.ApplicantID != "applicant_001" {
 		t.Fatalf("applicantId = %q, want applicant_001", quoteClient.command.ApplicantID)
-	}
-	if quoteClient.command.TraceParent == "" {
-		t.Fatal("traceparent was not propagated")
-	}
-	if quoteClient.command.TraceState != "vendor=state" {
-		t.Fatalf("tracestate = %q, want vendor=state", quoteClient.command.TraceState)
 	}
 	if quoteClient.operation != fidesbffv1pb.OperationFidesBffPricingServiceCreateQuote {
 		t.Fatalf("operation = %q, want %q", quoteClient.operation, fidesbffv1pb.OperationFidesBffPricingServiceCreateQuote)

@@ -53,15 +53,15 @@ func TestLoadBootstrap_EnvFileDoesNotOverrideExistingEnvironment(t *testing.T) {
 SERVER_HTTP_ADDR=127.0.0.1:9000
 APPLICANT_GRPC_TIMEOUT=10s
 REGISTRY_CONSUL_SERVICE_NAME=env-file-fides-bff
-QUOTE_HTTP_BASE_URL=http://quote-api.local:8080
-QUOTE_HTTP_TIMEOUT=5s
+QUOTE_GRPC_TIMEOUT=5s
+QUOTE_GRPC_PLAINTEXT=true
 ORIGINATION_HTTP_BASE_URL=http://origination-api.local:8080
 ORIGINATION_HTTP_TIMEOUT=6s
 `)
 	t.Setenv("SERVER_HTTP_ADDR", "127.0.0.1:7000")
 	t.Setenv("REGISTRY_CONSUL_SERVICE_NAME", "shell-fides-bff")
 	cleanupEnv(t, "APPLICANT_GRPC_TIMEOUT")
-	cleanupEnv(t, "QUOTE_HTTP_BASE_URL", "QUOTE_HTTP_TIMEOUT")
+	cleanupEnv(t, "QUOTE_GRPC_TIMEOUT", "QUOTE_GRPC_PLAINTEXT")
 	cleanupEnv(t, "ORIGINATION_HTTP_BASE_URL", "ORIGINATION_HTTP_TIMEOUT")
 
 	got, err := loadBootstrap(loadConfigOptions{ConfigPath: configPath, EnvFilePath: envPath})
@@ -77,8 +77,8 @@ ORIGINATION_HTTP_TIMEOUT=6s
 	if got.Registry.Consul.ServiceName != "shell-fides-bff" {
 		t.Fatalf("Registry.Consul.ServiceName = %q", got.Registry.Consul.ServiceName)
 	}
-	if got.Quote.HTTP.BaseURL != "http://quote-api.local:8080" || got.Quote.HTTP.Timeout != "5s" {
-		t.Fatalf("Quote.HTTP = %#v", got.Quote.HTTP)
+	if got.Quote.GRPC.Timeout != "5s" || !got.Quote.GRPC.Plaintext {
+		t.Fatalf("Quote.GRPC = %#v", got.Quote.GRPC)
 	}
 	if got.Origination.HTTP.BaseURL != "http://origination-api.local:8080" || got.Origination.HTTP.Timeout != "6s" {
 		t.Fatalf("Origination.HTTP = %#v", got.Origination.HTTP)
@@ -176,9 +176,9 @@ quote:
     address: "${QUOTE_CONSUL_ADDRESS:127.0.0.1:8500}"
     scheme: "${QUOTE_CONSUL_SCHEME:http}"
     service_name: "${QUOTE_CONSUL_SERVICE_NAME:quote-api}"
-  http:
-    base_url: "${QUOTE_HTTP_BASE_URL:}"
-    timeout: "${QUOTE_HTTP_TIMEOUT:3s}"
+  grpc:
+    timeout: "${QUOTE_GRPC_TIMEOUT:3s}"
+    plaintext: "${QUOTE_GRPC_PLAINTEXT:true}"
 origination:
   consul:
     address: "${ORIGINATION_CONSUL_ADDRESS:127.0.0.1:8500}"

@@ -1,8 +1,8 @@
 package data
 
 import (
-	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,15 +10,19 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
+	quotev1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/quote/v1"
 	"github.com/spark/bffkit"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/propagation"
 	oteltrace "go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc"
+	grpccodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"github.com/spark/fides-bff/internal/biz"
 	"github.com/spark/fides-bff/internal/conf"
@@ -26,145 +30,148 @@ import (
 
 var quoteTracer = otel.Tracer("github.com/spark/fides-bff/internal/data")
 
+const (
+	quoteCodeAmountOutOfRange = "QUOTE-PARAM-0002"
+	quoteCodeValidation       = "QUOTE-PARAM-0001"
+)
+
 type QuoteClient struct {
-	resolver ServiceResolver
-	timeout  time.Duration
-	client   *http.Client
+	resolver    ServiceResolver
+	timeout     time.Duration
+	dialOptions []grpc.DialOption
 }
 
 func NewQuoteClient(c *conf.Quote) *QuoteClient {
 	timeout := 3 * time.Second
+	plaintext := true
+	consul := conf.Consul{}
 	if c != nil {
-		if parsed, err := time.ParseDuration(c.HTTP.Timeout); err == nil && parsed > 0 {
+		consul = c.Consul
+		if parsed, err := time.ParseDuration(c.GRPC.Timeout); err == nil && parsed > 0 {
 			timeout = parsed
 		}
+		plaintext = c.GRPC.Plaintext
+	}
+	opts := []grpc.DialOption{}
+	if plaintext {
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	} else {
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
 	}
 	return &QuoteClient{
-		resolver: newQuoteResolver(c),
-		timeout:  timeout,
-		client:   &http.Client{},
+		resolver:    NewQuoteGRPCConsulResolver(consul),
+		timeout:     timeout,
+		dialOptions: opts,
 	}
 }
 
 func (c *QuoteClient) CreateQuote(ctx context.Context, command biz.CreateQuoteCommand) (biz.QuoteResult, error) {
-	if c == nil || c.resolver == nil {
+	client, cleanup, err := c.client(ctx)
+	if err != nil {
+		return biz.QuoteResult{}, err
+	}
+	defer cleanup()
+
+	rpcCtx, cancel, endSpan := c.rpcContext(ctx, command, "CreateQuote")
+	defer cancel()
+	resp, err := client.CreateQuote(rpcCtx, &quotev1pb.CreateQuoteRequest{
+		ProductCode: command.ProductCode,
+		Amount:      quoteAmount(command.Amount),
+		Term:        int32(command.Term),
+		Purpose:     command.Purpose,
+		TraceId:     quoteTraceID(ctx),
+	})
+	endSpan(err)
+	if err != nil {
+		return biz.QuoteResult{}, quoteErrorFromGRPC(err)
+	}
+	quote := resp.GetQuote()
+	if quote == nil {
 		return biz.QuoteResult{}, quoteUnavailable()
 	}
+	return biz.QuoteResult{
+		QuoteID:       quote.GetQuoteId(),
+		Monthly:       quote.GetMonthly(),
+		APR:           quote.GetApr(),
+		TotalInterest: quote.GetTotalInterest(),
+		TotalPayable:  quote.GetTotalPayable(),
+		ValidUntil:    quote.GetValidUntil(),
+	}, nil
+}
+
+func (c *QuoteClient) client(ctx context.Context) (quotev1pb.QuoteServiceClient, func(), error) {
+	if c == nil || c.resolver == nil {
+		return nil, func() {}, quoteUnavailable()
+	}
+	target, err := c.resolver.Resolve(ctx)
+	if err != nil {
+		return nil, func() {}, quoteUnavailable()
+	}
+	conn, err := grpcNewClient(target, c.dialOptions...)
+	if err != nil {
+		return nil, func() {}, quoteUnavailable()
+	}
+	return quotev1pb.NewQuoteServiceClient(conn), func() { _ = conn.Close() }, nil
+}
+
+func (c *QuoteClient) rpcContext(ctx context.Context, command biz.CreateQuoteCommand, method string) (context.Context, context.CancelFunc, func(error)) {
 	ctx, span := quoteTracer.Start(ctx,
-		"POST /api/v1/pricing/quotes",
+		"QuoteService/"+method,
 		oteltrace.WithSpanKind(oteltrace.SpanKindClient),
 		oteltrace.WithAttributes(
-			attribute.String("http.request.method", http.MethodPost),
-			attribute.String("server.address", "quote-api"),
+			attribute.String("rpc.system", "grpc"),
+			attribute.String("rpc.service", "vesta.lendora.quote.v1.QuoteService"),
+			attribute.String("rpc.method", method),
 		),
 	)
-	defer span.End()
-
-	if c.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, c.timeout)
-		defer cancel()
-	}
-	baseURL, err := c.resolver.Resolve(ctx)
-	if err != nil {
-		span.SetStatus(codes.Error, "resolve quote-api")
-		return biz.QuoteResult{}, quoteUnavailable()
-	}
-	endpoint, err := url.JoinPath(baseURL, "/api/v1/pricing/quotes")
-	if err != nil {
-		span.SetStatus(codes.Error, "build quote-api url")
-		return biz.QuoteResult{}, quoteUnavailable()
-	}
-	body := command.RawRequest
-	if len(body) == 0 {
-		body = fallbackQuoteRequest(command)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		span.SetStatus(codes.Error, "build quote-api request")
-		return biz.QuoteResult{}, quoteUnavailable()
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(bffkit.HeaderApplicantID, command.ApplicantID)
-	propagateTraceHeaders(ctx, req.Header, command)
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		span.SetStatus(codes.Error, "call quote-api")
-		return biz.QuoteResult{}, quoteUnavailable()
-	}
-	defer func() { _ = resp.Body.Close() }()
-	span.SetAttributes(attribute.Int("http.response.status_code", resp.StatusCode))
-	if resp.StatusCode == http.StatusOK {
-		var body quoteResponse
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-			span.SetStatus(codes.Error, "decode quote-api response")
-			return biz.QuoteResult{}, quoteUnavailable()
+	ctx = bffkit.ContextWithPrincipal(ctx, bffkit.Principal{ApplicantID: command.ApplicantID})
+	ctx = bffkit.OutgoingGRPCContext(ctx)
+	endSpan := func(err error) {
+		if err != nil {
+			span.SetStatus(codes.Error, status.Code(err).String())
+			span.SetAttributes(attribute.String("rpc.grpc.status_code", status.Code(err).String()))
 		}
-		return biz.QuoteResult{
-			QuoteID:       body.QuoteID,
-			Monthly:       body.Monthly,
-			APR:           body.APR,
-			TotalInterest: body.TotalInterest,
-			TotalPayable:  body.TotalPayable,
-			ValidUntil:    body.ValidUntil,
-		}, nil
+		span.End()
 	}
-	mapped := quoteErrorFromHTTP(resp)
-	if mapped.Code == biz.PricingCodeQuoteUnavailable {
-		span.SetStatus(codes.Error, mapped.Code)
+	if c == nil || c.timeout <= 0 {
+		return ctx, func() {}, endSpan
 	}
-	return biz.QuoteResult{}, mapped
+	timeoutCtx, cancel := context.WithTimeout(ctx, c.timeout)
+	return timeoutCtx, cancel, endSpan
 }
 
-type quoteResponse struct {
-	QuoteID       string `json:"quoteId"`
-	Monthly       string `json:"monthly"`
-	APR           string `json:"apr"`
-	TotalInterest string `json:"totalInterest"`
-	TotalPayable  string `json:"totalPayable"`
-	ValidUntil    string `json:"validUntil"`
+func quoteAmount(raw json.RawMessage) string {
+	var value string
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value
+	}
+	return ""
 }
 
-func newQuoteResolver(c *conf.Quote) ServiceResolver {
-	if c != nil && strings.TrimSpace(c.HTTP.BaseURL) != "" {
-		return staticURLResolver(strings.TrimRight(strings.TrimSpace(c.HTTP.BaseURL), "/"))
-	}
-	return NewQuoteConsulResolver(c)
+func quoteTraceID(ctx context.Context) string {
+	traceID, _ := bffkit.TraceIDFromContext(ctx)
+	return traceID
 }
 
-type staticURLResolver string
-
-func (r staticURLResolver) Resolve(context.Context) (string, error) {
-	if strings.TrimSpace(string(r)) == "" {
-		return "", errors.New("quote-api URL is empty")
-	}
-	return string(r), nil
+type QuoteGRPCConsulResolver struct {
+	baseURL     string
+	serviceName string
+	client      *http.Client
 }
 
-func NewQuoteConsulResolver(c *conf.Quote) *QuoteConsulResolver {
-	consul := conf.Consul{}
-	if c != nil {
-		consul = c.Consul
-	}
+func NewQuoteGRPCConsulResolver(consul conf.Consul) *QuoteGRPCConsulResolver {
 	scheme := firstNonEmpty(consul.Scheme, "http")
 	address := firstNonEmpty(consul.Address, "127.0.0.1:8500")
-	return &QuoteConsulResolver{
+	return &QuoteGRPCConsulResolver{
 		baseURL:     scheme + "://" + address,
 		serviceName: firstNonEmpty(consul.ServiceName, "quote-api"),
 		client:      &http.Client{Timeout: 2 * time.Second},
 	}
 }
 
-type QuoteConsulResolver struct {
-	baseURL     string
-	serviceName string
-	client      *http.Client
-}
-
-func (r *QuoteConsulResolver) Resolve(ctx context.Context) (string, error) {
+func (r *QuoteGRPCConsulResolver) Resolve(ctx context.Context) (string, error) {
 	if r == nil {
-		return "", errors.New("quote consul resolver is not configured")
+		return "", errors.New("quote grpc consul resolver is not configured")
 	}
 	endpoint, err := url.JoinPath(r.baseURL, "/v1/health/service", r.serviceName)
 	if err != nil {
@@ -188,54 +195,29 @@ func (r *QuoteConsulResolver) Resolve(ctx context.Context) (string, error) {
 	}
 	for _, entry := range entries {
 		address := firstNonEmpty(entry.Service.Address, entry.Node.Address)
-		port := entry.Service.Port
+		port := entry.Service.grpcPort()
 		if address == "" || port == 0 {
 			continue
 		}
-		return "http://" + net.JoinHostPort(address, strconv.Itoa(port)), nil
+		return net.JoinHostPort(address, strconv.Itoa(port)), nil
 	}
-	return "", errors.New("no healthy quote-api instance")
+	return "", errors.New("no healthy quote-api grpc instance")
 }
 
-func propagateTraceHeaders(ctx context.Context, header http.Header, command biz.CreateQuoteCommand) {
-	carrier := propagation.HeaderCarrier(header)
-	propagation.TraceContext{}.Inject(ctx, carrier)
-	if command.TraceParent != "" {
-		header.Set(bffkit.HeaderTraceParent, command.TraceParent)
+func quoteErrorFromGRPC(err error) *biz.PricingError {
+	st, ok := status.FromError(err)
+	if !ok {
+		return quoteUnavailable()
 	}
-	if command.TraceState != "" {
-		header.Set(bffkit.HeaderTraceState, command.TraceState)
-	}
-}
-
-func fallbackQuoteRequest(command biz.CreateQuoteCommand) []byte {
-	body := map[string]any{
-		"productCode": command.ProductCode,
-		"amount":      command.Amount,
-		"term":        command.Term,
-		"purpose":     command.Purpose,
-	}
-	data, err := json.Marshal(body)
-	if err != nil {
-		return []byte("{}")
-	}
-	return data
-}
-
-func quoteErrorFromHTTP(resp *http.Response) *biz.PricingError {
-	if resp.StatusCode == http.StatusUnprocessableEntity {
-		var body struct {
-			Error string `json:"error"`
-			Code  string `json:"code"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&body); err == nil {
-			code := firstNonEmpty(body.Error, body.Code)
-			switch code {
-			case biz.PricingCodeAmountOutOfRange:
-				return &biz.PricingError{Code: biz.PricingCodeAmountOutOfRange, Message: "amount out of range"}
-			case biz.PricingCodeValidation:
-				return &biz.PricingError{Code: biz.PricingCodeValidation, Message: "validation failed"}
-			}
+	switch st.Code() {
+	case grpccodes.Unavailable, grpccodes.DeadlineExceeded:
+		return quoteUnavailable()
+	case grpccodes.InvalidArgument:
+		switch st.Message() {
+		case quoteCodeAmountOutOfRange:
+			return &biz.PricingError{Code: biz.PricingCodeAmountOutOfRange, Message: "amount out of range"}
+		case quoteCodeValidation:
+			return &biz.PricingError{Code: biz.PricingCodeValidation, Message: "validation failed"}
 		}
 	}
 	return quoteUnavailable()

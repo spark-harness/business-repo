@@ -21,9 +21,6 @@ type CreateQuoteCommand struct {
 	Amount      json.RawMessage
 	Term        int
 	Purpose     string
-	TraceParent string
-	TraceState  string
-	RawRequest  json.RawMessage
 }
 
 type QuoteResult struct {
