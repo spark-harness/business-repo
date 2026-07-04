@@ -89,10 +89,9 @@ make init       # 安装 wire / golangci-lint 工具
 
 启动期配置按以下优先级合并，后者覆盖前者：
 
-1. `configs/config.yaml`：最低优先级默认值。
+1. `configs/config.yaml`：最低优先级默认值，并用 `${ENV:default}` 表达环境差异。
 2. `.env`：只在本地启动前加载进进程环境；缺失不报错，且不覆盖已经存在的 shell、CI 或 K8s 环境变量。
-3. 无前缀环境变量：只接受 `.env.example` 中列出的 allowlist key，并显式映射到 Kratos config path。
-4. Consul KV YAML：启用后作为远程启动期配置源，覆盖本地默认值和环境映射值。
+3. Kratos env source：读取进程环境，用于解析 `configs/config.yaml` 中引用的占位符。
 
 这不是运行时热更新；配置变更需要重启进程后生效。
 
@@ -101,83 +100,54 @@ make init       # 安装 wire / golangci-lint 工具
 ```yaml
 server:
   http:
-    network: tcp
-    addr: 0.0.0.0:8000
+    network: "${SERVER_HTTP_NETWORK:tcp}"
+    addr: "${SERVER_HTTP_ADDR:0.0.0.0:8000}"
 applicant:
   consul:
-    address: 127.0.0.1:8500
-    scheme: http
-    service_name: applicant-api
+    address: "${APPLICANT_CONSUL_ADDRESS:127.0.0.1:8500}"
+    scheme: "${APPLICANT_CONSUL_SCHEME:http}"
+    service_name: "${APPLICANT_CONSUL_SERVICE_NAME:applicant-api}"
   grpc:
-    timeout: 3s
-    plaintext: true
+    timeout: "${APPLICANT_GRPC_TIMEOUT:3s}"
+    plaintext: "${APPLICANT_GRPC_PLAINTEXT:true}"
 registry:
   consul:
-    enabled: true
-    address: 127.0.0.1:8500
-    scheme: http
-    service_name: fides-bff
-    discovery_addr: 127.0.0.1:8000
-    heartbeat: true
-    health_check: true
-    health_check_interval_sec: 10
-    deregister_after_sec: 60
+    enabled: "${REGISTRY_CONSUL_ENABLED:true}"
+    address: "${REGISTRY_CONSUL_ADDRESS:127.0.0.1:8500}"
+    scheme: "${REGISTRY_CONSUL_SCHEME:http}"
+    service_name: "${REGISTRY_CONSUL_SERVICE_NAME:fides-bff}"
+    discovery_addr: "${REGISTRY_CONSUL_DISCOVERY_ADDR:127.0.0.1:8000}"
+    heartbeat: "${REGISTRY_CONSUL_HEARTBEAT:true}"
+    health_check: "${REGISTRY_CONSUL_HEALTH_CHECK:true}"
+    health_check_interval_sec: "${REGISTRY_CONSUL_HEALTH_CHECK_INTERVAL_SEC:10}"
+    deregister_after_sec: "${REGISTRY_CONSUL_DEREGISTER_AFTER_SEC:60}"
     metadata:
-      module: frontend
+      module: "${REGISTRY_CONSUL_METADATA_MODULE:frontend}"
 observability:
   otel:
-    enabled: false
-    exporter: otlp
-    endpoint: ""
-    protocol: http/protobuf
-    headers: {}
-    environment: local
-    release: dev
+    enabled: "${OBSERVABILITY_OTEL_ENABLED:false}"
+    exporter: "${OBSERVABILITY_OTEL_EXPORTER:otlp}"
+    endpoint: "${OBSERVABILITY_OTEL_ENDPOINT:}"
+    protocol: "${OBSERVABILITY_OTEL_PROTOCOL:http/protobuf}"
+    headers:
+      x-sentry-auth: "${OBSERVABILITY_OTEL_X_SENTRY_AUTH:}"
+    environment: "${OBSERVABILITY_OTEL_ENVIRONMENT:local}"
+    release: "${OBSERVABILITY_OTEL_RELEASE:dev}"
 ```
 
 本地可复制 `.env.example` 为 `.env` 后调整私有值。`.env` 已被 git ignore，不要提交真实 token、密码、Authorization header 或其他 secret。
 
-无前缀环境变量只支持显式 allowlist，宿主机上的无关变量不会进入配置树。首批 allowlist 覆盖：
+`CONFIG_CONSUL_*` 不再参与启动配置加载。需要随环境变化的运行配置应通过 `configs/config.yaml` 中的 `${ENV:default}` 占位符表达，例如：
 
-- `SERVER_*`
-- `APPLICANT_*`
-- `REGISTRY_*`
-- `OBSERVABILITY_*`
-
-Consul 配置源通过 bootstrap 环境变量启用，bootstrap 值必须来自本地环境或平台 Secret，不能从 Consul 自举读取：
-
-```text
-CONFIG_CONSUL_ENABLED=true
-CONFIG_CONSUL_SCHEME=http
-CONFIG_CONSUL_ADDRESS=127.0.0.1:8500
-CONFIG_CONSUL_PATH=config/lendora/fides-bff/config.yaml
-CONFIG_CONSUL_TOKEN=<from-local-env-or-platform-secret>
+```bash
+SERVER_HTTP_ADDR=127.0.0.1:8000
+APPLICANT_CONSUL_ADDRESS=127.0.0.1:8500
+REGISTRY_CONSUL_SERVICE_NAME=dev-1-fides-bff
+REGISTRY_CONSUL_DISCOVERY_ADDR=127.0.0.1:8000
+OBSERVABILITY_OTEL_ENVIRONMENT=local
 ```
 
-Consul KV value 应保存一份可审查的 YAML，而不是把每个字段拆成碎片 key。默认路径约定：
-
-```text
-config/lendora/fides-bff/config.yaml
-```
-
-示例 YAML 只放非密运行配置：
-
-```yaml
-server:
-  http:
-    addr: 127.0.0.1:8000
-applicant:
-  consul:
-    address: 127.0.0.1:8500
-registry:
-  consul:
-    discovery_addr: 127.0.0.1:8000
-observability:
-  otel:
-    environment: local
-```
-
-Consul KV 不保存 token、密码或其他 secret。Consul 不可访问、配置 key 缺失或 YAML 格式无效时，服务启动失败，并输出不包含敏感值的错误。
+这里删除的只是启动配置的 Consul KV source，不是服务注册/发现配置。`applicant.consul`、`quote.consul`、`origination.consul` 和 `registry.consul` 仍然通过环境占位符生效。
 
 ## API
 

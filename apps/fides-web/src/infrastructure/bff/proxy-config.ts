@@ -1,10 +1,5 @@
-import { loadRuntimeConfig } from "@/infrastructure/runtime-config/runtime-config";
+import { getFidesEnv } from "@/config/env";
 
-export async function getBffProxyBaseUrl(): Promise<string> {
-  const config = await loadRuntimeConfig();
-  const baseUrl = config.internal.bffBaseUrl;
-  if (!baseUrl) {
-    throw new Error("FIDES_BFF_BASE_URL is required for /api/v1 proxy");
-  }
-  return baseUrl.replace(/\/+$/, "");
+export function getBffProxyBaseUrl(): string {
+  return getFidesEnv().FIDES_BFF_BASE_URL.replace(/\/+$/, "");
 }

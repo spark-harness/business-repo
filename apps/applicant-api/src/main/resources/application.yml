@@ -3,23 +3,13 @@ spring:
     name: applicant-api
   config:
     import:
-      - "optional:consul:"
       - "optional:file:.env[.properties]"
-  cloud:
-    consul:
-      enabled: false
-      config:
-        enabled: false
-        format: yaml
-        watch:
-          enabled: false
-        name: applicant-api
   data:
     redis:
-      host: localhost
-      port: 6379
-      password: forest_dev_password
-      timeout: 2s
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT:2s}
 
 management:
   health:
@@ -50,26 +40,26 @@ otel:
 spark:
   applicant:
     auth:
-      runtime-store: redis-jdbc
-      otp-provider: test
-      token-mode: hmac
-      jdbc-url: jdbc:postgresql://localhost:5432/app
-      jdbc-username: forest
-      jdbc-password: forest_dev_password
-      token-secret: local-dev-token-secret
-      migrations-enabled: true
-      key-prefix: applicant-api
+      runtime-store: ${SPARK_APPLICANT_AUTH_RUNTIME_STORE:redis-jdbc}
+      otp-provider: ${SPARK_APPLICANT_AUTH_OTP_PROVIDER:test}
+      token-mode: ${SPARK_APPLICANT_AUTH_TOKEN_MODE:hmac}
+      jdbc-url: ${SPARK_APPLICANT_AUTH_JDBC_URL:jdbc:postgresql://localhost:5432/app}
+      jdbc-username: ${SPARK_APPLICANT_AUTH_JDBC_USERNAME:forest}
+      jdbc-password: ${SPARK_APPLICANT_AUTH_JDBC_PASSWORD:}
+      token-secret: ${SPARK_APPLICANT_AUTH_TOKEN_SECRET:}
+      migrations-enabled: ${SPARK_APPLICANT_AUTH_MIGRATIONS_ENABLED:true}
+      key-prefix: ${SPARK_APPLICANT_AUTH_KEY_PREFIX:applicant-api}
       consul:
-        enabled: true
-        url: http://localhost:8500
-        service-name: applicant-api
-        service-address: 127.0.0.1
-        http-port: 8080
-        grpc-port: 9090
-        health-check-url: ""
-        health-check-path: /ready
+        enabled: ${SPARK_APPLICANT_AUTH_CONSUL_ENABLED:true}
+        url: ${SPARK_APPLICANT_AUTH_CONSUL_URL:http://localhost:8500}
+        service-name: ${SPARK_APPLICANT_AUTH_CONSUL_SERVICE_NAME:applicant-api}
+        service-address: ${SPARK_APPLICANT_AUTH_CONSUL_SERVICE_ADDRESS:127.0.0.1}
+        http-port: ${SPARK_APPLICANT_AUTH_CONSUL_HTTP_PORT:8080}
+        grpc-port: ${SPARK_APPLICANT_AUTH_CONSUL_GRPC_PORT:9090}
+        health-check-url: ${SPARK_APPLICANT_AUTH_CONSUL_HEALTH_CHECK_URL:}
+        health-check-path: ${SPARK_APPLICANT_AUTH_CONSUL_HEALTH_CHECK_PATH:/ready}
   grpc:
     server:
-      port: 9090
+      port: ${SPARK_GRPC_SERVER_PORT:9090}
       principal:
         enabled: false

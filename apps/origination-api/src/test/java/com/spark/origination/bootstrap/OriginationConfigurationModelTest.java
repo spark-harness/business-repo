@@ -2,6 +2,7 @@ package com.spark.origination.bootstrap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.spark.origination.infrastructure.ConsulServiceRegistration;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -15,15 +16,13 @@ import org.springframework.core.io.ClassPathResource;
 
 class OriginationConfigurationModelTest {
     @Test
-    void applicationYaml_whenLoaded_shouldImportOptionalConsulConfig() throws IOException {
+    void applicationYaml_whenLoaded_shouldNotImportSpringCloudConsulConfig() throws IOException {
         String applicationYaml = resourceText("application.yml");
 
         assertThat(applicationYaml).contains("import:");
-        assertThat(applicationYaml).contains("\"optional:consul:\"");
-        assertThat(applicationYaml).contains("consul:\n      enabled: false");
-        assertThat(applicationYaml).contains("format: yaml");
-        assertThat(applicationYaml).contains("watch:");
-        assertThat(applicationYaml).contains("enabled: false");
+        assertThat(applicationYaml).contains("\"optional:file:.env[.properties]\"");
+        assertThat(applicationYaml).doesNotContain("\"optional:consul:\"");
+        assertThat(applicationYaml).doesNotContain("spring-cloud-starter-consul-config");
     }
 
     @Test
@@ -47,10 +46,23 @@ class OriginationConfigurationModelTest {
     }
 
     @Test
-    void pom_whenLoaded_shouldUseConsulConfigAndOpenTelemetryStarter() throws IOException {
+    void applicationYaml_whenLoaded_shouldRetainCanonicalEnvPlaceholdersAndSelfRegistration() throws IOException {
+        String applicationYaml = resourceText("application.yml");
+
+        assertThat(applicationYaml).contains("jdbc-url: ${ORIGINATION_JDBC_URL:");
+        assertThat(applicationYaml).contains("quote-api-base-url: ${ORIGINATION_QUOTE_API_BASE_URL:");
+        assertThat(applicationYaml).contains("enabled: ${SPARK_ORIGINATION_CONSUL_ENABLED:false}");
+        assertThat(applicationYaml).contains("url: ${SPARK_ORIGINATION_CONSUL_URL:http://localhost:8500}");
+        assertThat(applicationYaml).contains("service-address: ${SPARK_ORIGINATION_CONSUL_SERVICE_ADDRESS:127.0.0.1}");
+        assertThat(applicationYaml).contains("grpc-port: ${SPARK_ORIGINATION_CONSUL_GRPC_PORT:9090}");
+        assertThat(ConsulServiceRegistration.class).isNotNull();
+    }
+
+    @Test
+    void pom_whenLoaded_shouldNotUseConsulConfigAndShouldKeepOpenTelemetryStarter() throws IOException {
         String pom = Files.readString(Path.of("pom.xml"), StandardCharsets.UTF_8);
 
-        assertThat(pom).contains("<artifactId>spring-cloud-starter-consul-config</artifactId>");
+        assertThat(pom).doesNotContain("<artifactId>spring-cloud-starter-consul-config</artifactId>");
         assertThat(pom).contains("<artifactId>opentelemetry-spring-boot-starter</artifactId>");
     }
 

@@ -19,8 +19,14 @@ import (
 type Shutdown func(context.Context) error
 
 func Setup(ctx context.Context, c conf.OTel, serviceName string, fallbackRelease string) (Shutdown, error) {
-	if !c.Enabled || strings.TrimSpace(c.Endpoint) == "" {
+	if !c.Enabled {
 		return func(context.Context) error { return nil }, nil
+	}
+	if strings.TrimSpace(c.Endpoint) == "" {
+		return nil, errors.New("OBSERVABILITY_OTEL_ENDPOINT is required when OBSERVABILITY_OTEL_ENABLED=true")
+	}
+	if err := validateHeaders(c.Headers); err != nil {
+		return nil, err
 	}
 	if c.Exporter != "" && c.Exporter != "otlp" {
 		return nil, errors.New("unsupported otel exporter")
@@ -55,8 +61,8 @@ func newTraceExporter(ctx context.Context, c conf.OTel) (sdktrace.SpanExporter, 
 	switch strings.ToLower(firstNonEmpty(c.Protocol, "http/protobuf")) {
 	case "http/protobuf", "http":
 		opts := []otlptracehttp.Option{httpEndpointOption(c.Endpoint)}
-		if len(c.Headers) > 0 {
-			opts = append(opts, otlptracehttp.WithHeaders(c.Headers))
+		if headers := nonEmptyHeaders(c.Headers); len(headers) > 0 {
+			opts = append(opts, otlptracehttp.WithHeaders(headers))
 		}
 		if isInsecureEndpoint(c.Endpoint) {
 			opts = append(opts, otlptracehttp.WithInsecure())
@@ -64,8 +70,8 @@ func newTraceExporter(ctx context.Context, c conf.OTel) (sdktrace.SpanExporter, 
 		return otlptracehttp.New(ctx, opts...)
 	case "grpc":
 		opts := []otlptracegrpc.Option{grpcEndpointOption(c.Endpoint)}
-		if len(c.Headers) > 0 {
-			opts = append(opts, otlptracegrpc.WithHeaders(c.Headers))
+		if headers := nonEmptyHeaders(c.Headers); len(headers) > 0 {
+			opts = append(opts, otlptracegrpc.WithHeaders(headers))
 		}
 		if isInsecureEndpoint(c.Endpoint) {
 			opts = append(opts, otlptracegrpc.WithInsecure())
@@ -74,6 +80,32 @@ func newTraceExporter(ctx context.Context, c conf.OTel) (sdktrace.SpanExporter, 
 	default:
 		return nil, errors.New("unsupported otel protocol")
 	}
+}
+
+func nonEmptyHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	filtered := make(map[string]string, len(headers))
+	for key, value := range headers {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key != "" && value != "" {
+			filtered[key] = value
+		}
+	}
+	return filtered
+}
+
+func validateHeaders(headers map[string]string) error {
+	for key, value := range headers {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" {
+			return errors.New("OBSERVABILITY_OTEL headers require non-empty names and values when OBSERVABILITY_OTEL_ENABLED=true")
+		}
+	}
+	return nil
 }
 
 func httpEndpointOption(endpoint string) otlptracehttp.Option {
