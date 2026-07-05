@@ -10,7 +10,6 @@ create table if not exists quotes (
   total_interest numeric(18,2) not null,
   total_payable numeric(18,2) not null,
   valid_until timestamp not null,
-  trace_id varchar(128),
   created_at timestamp not null
 );
 

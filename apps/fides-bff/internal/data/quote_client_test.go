@@ -9,7 +9,6 @@ import (
 	"time"
 
 	quotev1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/quote/v1"
-	"github.com/spark/bffkit"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -39,8 +38,7 @@ func TestQuoteClient_CreateQuoteCallsQuoteAPIOverGRPC(t *testing.T) {
 		timeout:     time.Second,
 		dialOptions: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
 	}
-	ctx := bffkit.ContextWithTraceID(context.Background(), "trace-123")
-	result, err := client.CreateQuote(ctx, biz.CreateQuoteCommand{
+	result, err := client.CreateQuote(context.Background(), biz.CreateQuoteCommand{
 		ApplicantID: "applicant_001",
 		ProductCode: "PIL",
 		Amount:      []byte(`"100000.00"`),
@@ -55,9 +53,6 @@ func TestQuoteClient_CreateQuoteCallsQuoteAPIOverGRPC(t *testing.T) {
 	}
 	if server.fake.lastCreate.GetProductCode() != "PIL" || server.fake.lastCreate.GetAmount() != "100000.00" || server.fake.lastCreate.GetTerm() != 12 || server.fake.lastCreate.GetPurpose() != "debt_consolidation" {
 		t.Fatalf("request = %#v", server.fake.lastCreate)
-	}
-	if server.fake.lastCreate.GetTraceId() != "trace-123" {
-		t.Fatalf("trace_id = %q, want trace-123", server.fake.lastCreate.GetTraceId())
 	}
 	if got := server.fake.lastMetadata.Get("x-applicant-id"); len(got) != 1 || got[0] != "applicant_001" {
 		t.Fatalf("x-applicant-id = %#v, want applicant_001", got)

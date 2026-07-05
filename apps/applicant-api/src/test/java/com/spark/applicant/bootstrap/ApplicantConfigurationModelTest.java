@@ -67,8 +67,10 @@ class ApplicantConfigurationModelTest {
         assertThat(applicationYaml).doesNotContain("forest_dev_password");
         assertThat(applicationYaml).doesNotContain("local-dev-token-secret");
         assertThat(applicationYaml).contains("url: ${SPARK_APPLICANT_AUTH_CONSUL_URL:http://localhost:8500}");
-        assertThat(applicationYaml).contains("endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:}");
-        assertThat(applicationYaml).contains("headers: ${OTEL_EXPORTER_OTLP_TRACES_HEADERS:}");
+        assertThat(applicationYaml).contains("endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}");
+        assertThat(applicationYaml)
+                .contains("endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}}");
+        assertThat(applicationYaml).contains("headers: ${OTEL_EXPORTER_OTLP_TRACES_HEADERS:${OTEL_EXPORTER_OTLP_HEADERS:}}");
 
         assertThat(prodYaml).contains("host: ${SPRING_DATA_REDIS_HOST:}");
         assertThat(prodYaml).contains("password: ${SPRING_DATA_REDIS_PASSWORD:}");
@@ -76,8 +78,10 @@ class ApplicantConfigurationModelTest {
         assertThat(prodYaml).contains("jdbc-username: ${SPARK_APPLICANT_AUTH_JDBC_USERNAME:}");
         assertThat(prodYaml).contains("jdbc-password: ${SPARK_APPLICANT_AUTH_JDBC_PASSWORD:}");
         assertThat(prodYaml).contains("token-secret: ${SPARK_APPLICANT_AUTH_TOKEN_SECRET:}");
-        assertThat(prodYaml).contains("endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:}");
-        assertThat(prodYaml).contains("headers: ${OTEL_EXPORTER_OTLP_TRACES_HEADERS:}");
+        assertThat(prodYaml).contains("endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}");
+        assertThat(prodYaml)
+                .contains("endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}}");
+        assertThat(prodYaml).contains("headers: ${OTEL_EXPORTER_OTLP_TRACES_HEADERS:${OTEL_EXPORTER_OTLP_HEADERS:}}");
         assertThat(ConsulServiceRegistration.class).isNotNull();
     }
 

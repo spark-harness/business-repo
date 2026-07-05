@@ -16,8 +16,11 @@ import org.springframework.core.env.Environment;
             "spark.applicant.auth.token-mode=simple",
             "spark.applicant.auth.consul.enabled=false",
             "otel.traces.exporter=otlp",
+            "otel.logs.exporter=otlp",
             "otel.exporter.otlp.traces.endpoint=https://otel.example/api/1/otel/v1/traces",
-            "otel.exporter.otlp.traces.headers=x-sentry-auth=sentry sentry_key=public"
+            "otel.exporter.otlp.logs.endpoint=https://otel.example/api/1/otel/v1/logs",
+            "otel.exporter.otlp.traces.headers=x-sentry-auth=sentry sentry_key=public",
+            "otel.exporter.otlp.logs.headers=x-sentry-auth=sentry sentry_key=public"
         })
 class ApplicantObservabilityConfigurationTest {
     @Autowired
@@ -32,7 +35,8 @@ class ApplicantObservabilityConfigurationTest {
         assertThat(environment.getProperty("otel.propagators")).isEqualTo("tracecontext,baggage");
         assertThat(environment.getProperty("otel.traces.exporter")).isEqualTo("otlp");
         assertThat(environment.getProperty("otel.exporter.otlp.traces.protocol")).isEqualTo("http/protobuf");
-        assertThat(environment.getProperty("otel.logs.exporter")).isEqualTo("none");
+        assertThat(environment.getProperty("otel.logs.exporter")).isEqualTo("otlp");
+        assertThat(environment.getProperty("otel.exporter.otlp.logs.protocol")).isEqualTo("http/protobuf");
         assertThat(environment.getProperty("otel.metrics.exporter")).isEqualTo("none");
         assertThat(environment.getProperty("otel.service.name")).isEqualTo("applicant-api");
     }

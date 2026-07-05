@@ -24,8 +24,8 @@ public class JdbcQuoteRepository implements QuoteRepository {
                 """
                 insert into quotes (
                   quote_id, applicant_id, product_code, amount, term_months, purpose,
-                  monthly, apr, total_interest, total_payable, valid_until, trace_id, created_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  monthly, apr, total_interest, total_payable, valid_until, created_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 quote.quoteId(),
                 quote.applicantId(),
@@ -38,7 +38,6 @@ public class JdbcQuoteRepository implements QuoteRepository {
                 quote.totalInterest(),
                 quote.totalPayable(),
                 Timestamp.from(quote.validUntil()),
-                quote.traceId(),
                 Timestamp.from(quote.createdAt()));
     }
 
@@ -66,7 +65,6 @@ public class JdbcQuoteRepository implements QuoteRepository {
                 rs.getBigDecimal("total_interest"),
                 rs.getBigDecimal("total_payable"),
                 toInstant(rs, "valid_until"),
-                rs.getString("trace_id"),
                 toInstant(rs, "created_at"));
     }
 

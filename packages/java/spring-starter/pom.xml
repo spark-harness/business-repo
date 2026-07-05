@@ -17,6 +17,7 @@
     <spring-boot.version>3.5.14</spring-boot.version>
     <grpc-java.version>1.81.0</grpc-java.version>
     <opentelemetry.version>1.60.1</opentelemetry.version>
+    <opentelemetry.instrumentation.version>2.26.0</opentelemetry.instrumentation.version>
     <java.quality.config.dir>${project.basedir}/../../../tooling/java-quality/config</java.quality.config.dir>
   </properties>
 
@@ -81,6 +82,20 @@
       <groupId>io.opentelemetry</groupId>
       <artifactId>opentelemetry-context</artifactId>
       <version>${opentelemetry.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.opentelemetry.instrumentation</groupId>
+      <artifactId>opentelemetry-logback-appender-1.0</artifactId>
+      <version>${opentelemetry.instrumentation.version}-alpha</version>
+    </dependency>
+    <dependency>
+      <groupId>io.opentelemetry.instrumentation</groupId>
+      <artifactId>opentelemetry-logback-mdc-1.0</artifactId>
+      <version>${opentelemetry.instrumentation.version}-alpha</version>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
