@@ -83,6 +83,15 @@ class JavaQualityTest(unittest.TestCase):
             ["1 money spring-starter", "2 applicant-api origination-api quote-api"],
         )
 
+    def test_checkstyle_bans_non_slf4j_logging_apis(self):
+        checkstyle = (TOOL_ROOT / "config" / "checkstyle.xml").read_text(encoding="utf-8")
+
+        self.assertIn("IllegalImport", checkstyle)
+        self.assertIn("ch.qos.logback", checkstyle)
+        self.assertIn("java.util.logging", checkstyle)
+        self.assertIn("org.apache.commons.logging", checkstyle)
+        self.assertIn("org.apache.logging.log4j", checkstyle)
+
     def test_unknown_java_project_fails(self):
         result = self.run_tool("plan", "packages/java/unknown/pom.xml")
         self.assertNotEqual(result.returncode, 0, result.stdout)

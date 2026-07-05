@@ -76,7 +76,6 @@ class QuoteGrpcAdapterTest {
                 .setAmount("100000.00")
                 .setTerm(12)
                 .setPurpose("debt_consolidation")
-                .setTraceId("trace-1")
                 .build());
 
         assertThat(response.getQuote().getQuoteId()).startsWith("quote_");
@@ -220,7 +219,6 @@ class QuoteGrpcAdapterTest {
                 new BigDecimal("2729.00"),
                 new BigDecimal("102729.00"),
                 validUntil,
-                "trace-1",
                 clock.instant());
     }
 }

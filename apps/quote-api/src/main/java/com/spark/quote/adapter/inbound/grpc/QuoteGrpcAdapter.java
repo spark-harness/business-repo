@@ -19,11 +19,17 @@ import io.grpc.BindableService;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
 import java.math.BigDecimal;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
 @InboundAdapter
 public class QuoteGrpcAdapter implements BindableService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(QuoteGrpcAdapter.class);
+
     private final CreateQuoteUseCase createQuoteUseCase;
     private final GetQuoteUseCase getQuoteUseCase;
     private final QuoteServiceGrpc.QuoteServiceImplBase delegate = new GrpcDelegate();
@@ -45,13 +51,14 @@ public class QuoteGrpcAdapter implements BindableService {
                     request.getProductCode(),
                     amount(request.getAmount()),
                     request.getTerm(),
-                    request.getPurpose(),
-                    request.getTraceId()));
+                    request.getPurpose()));
+            logSuccess("QuoteService/CreateQuote");
             responseObserver.onNext(CreateQuoteResponse.newBuilder()
                     .setQuote(toProto(quote))
                     .build());
             responseObserver.onCompleted();
         } catch (RuntimeException error) {
+            logFailure("QuoteService/CreateQuote", errorCode(error), error);
             responseObserver.onError(toStatus(error).withDescription(errorCode(error)).asRuntimeException());
         }
     }
@@ -59,11 +66,13 @@ public class QuoteGrpcAdapter implements BindableService {
     private void getQuote(GetQuoteRequest request, StreamObserver<GetQuoteResponse> responseObserver) {
         try {
             com.spark.quote.domain.Quote quote = getQuoteUseCase.get(request.getQuoteId());
+            logSuccess("QuoteService/GetQuote");
             responseObserver.onNext(GetQuoteResponse.newBuilder()
                     .setQuote(toProto(quote))
                     .build());
             responseObserver.onCompleted();
         } catch (RuntimeException error) {
+            logFailure("QuoteService/GetQuote", errorCode(error), error);
             responseObserver.onError(toStatus(error).withDescription(errorCode(error)).asRuntimeException());
         }
     }
@@ -130,6 +139,26 @@ public class QuoteGrpcAdapter implements BindableService {
             return "QUOTE-STATE-0002";
         }
         return "QUOTE-SYSTEM-0001";
+    }
+
+    private static void logSuccess(String operation) {
+        SpanContext spanContext = Span.current().getSpanContext();
+        LOGGER.info(
+                "service=quote-api operation={} result=success trace_id={} span_id={}",
+                operation,
+                spanContext.getTraceId(),
+                spanContext.getSpanId());
+    }
+
+    private static void logFailure(String operation, String errorCode, RuntimeException error) {
+        SpanContext spanContext = Span.current().getSpanContext();
+        LOGGER.warn(
+                "service=quote-api operation={} result=failure error_code={} trace_id={} span_id={}",
+                operation,
+                errorCode,
+                spanContext.getTraceId(),
+                spanContext.getSpanId(),
+                error);
     }
 
     private final class GrpcDelegate extends QuoteServiceGrpc.QuoteServiceImplBase {

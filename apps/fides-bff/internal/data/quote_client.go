@@ -81,7 +81,6 @@ func (c *QuoteClient) CreateQuote(ctx context.Context, command biz.CreateQuoteCo
 		Amount:      quoteAmount(command.Amount),
 		Term:        int32(command.Term),
 		Purpose:     command.Purpose,
-		TraceId:     quoteTraceID(ctx),
 	})
 	endSpan(err)
 	if err != nil {
@@ -148,11 +147,6 @@ func quoteAmount(raw json.RawMessage) string {
 		return value
 	}
 	return ""
-}
-
-func quoteTraceID(ctx context.Context) string {
-	traceID, _ := bffkit.TraceIDFromContext(ctx)
-	return traceID
 }
 
 type QuoteGRPCConsulResolver struct {

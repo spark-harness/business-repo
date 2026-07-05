@@ -24,11 +24,10 @@ class QuoteUseCaseTest {
         TestPrincipal.set("applicant_001");
 
         Quote quote = createQuoteUseCase.create(new CreateQuoteCommand(
-                "PIL", new BigDecimal("100000.00"), 12, "debt_consolidation", "trace-1"));
+                "PIL", new BigDecimal("100000.00"), 12, "debt_consolidation"));
 
         assertThat(quote.quoteId()).startsWith("quote_");
         assertThat(quote.applicantId()).isEqualTo("applicant_001");
-        assertThat(quote.traceId()).isEqualTo("trace-1");
         assertThat(quote.monthly()).isEqualByComparingTo("8560.75");
         assertThat(quote.apr()).isEqualByComparingTo("0.0520");
         assertThat(quote.totalInterest()).isEqualByComparingTo("2729.00");

@@ -99,3 +99,17 @@ spark.grpc.server.port=9090
 - 出站能力先在 `application` 或 `domain` 定义 port，再由 `infrastructure` 实现。
 - 不为领域层引入 Spring 注解。
 - gRPC server 生命周期由 starter 托管，业务服务只提供 `BindableService` 入站适配器。
+
+## 日志和 OpenTelemetry Logs
+
+Starter 提供统一的 `logback-spring.xml`，业务服务只使用 SLF4J API 记录日志。日志会通过 Logback 输出到控制台，并在存在 OpenTelemetry SDK 时由 `opentelemetry-logback-appender-1.0` 导出到 OTel Logs。
+
+服务必须通过环境变量配置导出，不在代码中写供应商 endpoint 或 token：
+
+```properties
+OTEL_LOGS_EXPORTER=otlp
+OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=https://otel.example/api/1/otel/v1/logs
+OTEL_EXPORTER_OTLP_LOGS_HEADERS=x-sentry-auth=sentry sentry_key=public
+```
+
+日志上下文统一包含 `trace_id` 和 `span_id`。业务日志需要在消息中保留低基数字段，例如 `service`、`operation`、`result` 和稳定 `error_code`。

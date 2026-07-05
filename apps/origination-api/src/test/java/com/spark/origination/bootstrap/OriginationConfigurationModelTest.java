@@ -31,11 +31,17 @@ class OriginationConfigurationModelTest {
 
         assertThat(applicationYaml).contains("propagators: tracecontext,baggage");
         assertThat(applicationYaml).contains("exporter: ${OTEL_TRACES_EXPORTER:none}");
+        assertThat(applicationYaml).contains("exporter: ${OTEL_LOGS_EXPORTER:${OTEL_TRACES_EXPORTER:none}}");
         assertThat(applicationYaml).contains("sampler: ${OTEL_TRACES_SAMPLER:parentbased_traceidratio}");
         assertThat(applicationYaml).contains("sampler.arg: ${OTEL_TRACES_SAMPLER_ARG:0.0}");
         assertThat(applicationYaml).contains("protocol: http/protobuf");
-        assertThat(applicationYaml).contains("endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:}");
-        assertThat(applicationYaml).contains("headers: ${OTEL_EXPORTER_OTLP_TRACES_HEADERS:}");
+        assertThat(applicationYaml).contains("endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}");
+        assertThat(applicationYaml)
+                .contains("endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}}");
+        assertThat(applicationYaml)
+                .contains("endpoint: ${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}}");
+        assertThat(applicationYaml).contains("headers: ${OTEL_EXPORTER_OTLP_TRACES_HEADERS:${OTEL_EXPORTER_OTLP_HEADERS:}}");
+        assertThat(applicationYaml).contains("headers: ${OTEL_EXPORTER_OTLP_LOGS_HEADERS:${OTEL_EXPORTER_OTLP_HEADERS:}}");
     }
 
     @Test

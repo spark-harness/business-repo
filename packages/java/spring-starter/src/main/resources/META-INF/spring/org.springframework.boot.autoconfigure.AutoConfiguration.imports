@@ -1,3 +1,4 @@
 com.spark.common.spring.cleanarchitecture.autoconfigure.CleanArchitectureAutoConfiguration
 com.spark.common.spring.cleanarchitecture.autoconfigure.GrpcServerAutoConfiguration
+com.spark.common.spring.cleanarchitecture.autoconfigure.OpenTelemetryLogbackAutoConfiguration
 com.spark.common.spring.security.RequestPrincipalHttpAutoConfiguration

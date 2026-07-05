@@ -46,7 +46,6 @@ public class CreateQuoteUseCase {
                 calculation.totalInterest(),
                 calculation.totalPayable(),
                 createdAt.plus(validity),
-                command.traceId(),
                 createdAt);
         repository.save(quote);
         return quote;

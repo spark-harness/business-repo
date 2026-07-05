@@ -34,11 +34,17 @@ import io.grpc.BindableService;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
 import java.math.BigDecimal;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
 @InboundAdapter
 public class OriginationLoanApplicationGrpcAdapter implements BindableService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(OriginationLoanApplicationGrpcAdapter.class);
+
     private final CreateLoanApplicationUseCase createUseCase;
     private final GetLoanApplicationUseCase getUseCase;
     private final PatchLoanApplicationUseCase patchUseCase;
@@ -69,6 +75,7 @@ public class OriginationLoanApplicationGrpcAdapter implements BindableService {
         try {
             LoanApplication application = createUseCase.create(new CreateLoanApplicationCommand(
                     request.getProductCode(), toDomain(request.getLoan()), request.getQuoteId(), request.getIdempotencyKey()));
+            logSuccess("OriginationLoanApplicationService/CreateLoanApplication");
             responseObserver.onNext(CreateLoanApplicationResponse.newBuilder()
                     .setApplicationId(application.applicationId())
                     .setStatus(application.status().value())
@@ -76,6 +83,10 @@ public class OriginationLoanApplicationGrpcAdapter implements BindableService {
                     .build());
             responseObserver.onCompleted();
         } catch (RuntimeException error) {
+            logFailure(
+                    "OriginationLoanApplicationService/CreateLoanApplication",
+                    errorCode(error),
+                    error);
             responseObserver.onError(toStatus(error).withDescription(errorCode(error)).asRuntimeException());
         }
     }
@@ -248,6 +259,26 @@ public class OriginationLoanApplicationGrpcAdapter implements BindableService {
             return "ORIGINATION-QUOTE-0003";
         }
         return "ORIGINATION-SYSTEM-0001";
+    }
+
+    private static void logSuccess(String operation) {
+        SpanContext spanContext = Span.current().getSpanContext();
+        LOGGER.info(
+                "service=origination-api operation={} result=success trace_id={} span_id={}",
+                operation,
+                spanContext.getTraceId(),
+                spanContext.getSpanId());
+    }
+
+    private static void logFailure(String operation, String errorCode, RuntimeException error) {
+        SpanContext spanContext = Span.current().getSpanContext();
+        LOGGER.warn(
+                "service=origination-api operation={} result=failure error_code={} trace_id={} span_id={}",
+                operation,
+                errorCode,
+                spanContext.getTraceId(),
+                spanContext.getSpanId(),
+                error);
     }
 
     private final class GrpcDelegate

@@ -31,7 +31,6 @@ class JdbcQuoteRepositoryTest {
                   total_interest numeric(18,2) not null,
                   total_payable numeric(18,2) not null,
                   valid_until timestamp not null,
-                  trace_id varchar(128),
                   created_at timestamp not null
                 )
                 """);
@@ -52,7 +51,6 @@ class JdbcQuoteRepositoryTest {
                 new BigDecimal("2729.00"),
                 new BigDecimal("102729.00"),
                 Instant.parse("2026-06-28T00:30:00Z"),
-                "trace-1",
                 Instant.parse("2026-06-28T00:00:00Z"));
 
         repository.save(quote);

@@ -15,5 +15,4 @@ public record Quote(
         BigDecimal totalInterest,
         BigDecimal totalPayable,
         Instant validUntil,
-        String traceId,
         Instant createdAt) {}
