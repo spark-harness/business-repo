@@ -43,19 +43,14 @@ type Quote struct {
 }
 
 type Origination struct {
-	Consul Consul          `json:"consul"`
-	HTTP   OriginationHTTP `json:"http"`
+	Consul Consul `json:"consul"`
+	GRPC   GRPC   `json:"grpc"`
 }
 
 type Consul struct {
 	Address     string `json:"address"`
 	Scheme      string `json:"scheme"`
 	ServiceName string `json:"service_name"`
-}
-
-type OriginationHTTP struct {
-	BaseURL string `json:"base_url"`
-	Timeout string `json:"timeout"`
 }
 
 type GRPC struct {
