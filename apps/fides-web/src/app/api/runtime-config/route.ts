@@ -2,6 +2,6 @@ import { getRuntimeConfigResponse } from "@/api/runtime-config/runtime-config-ro
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  return getRuntimeConfigResponse();
+export async function GET(request: Request) {
+  return getRuntimeConfigResponse(request);
 }
