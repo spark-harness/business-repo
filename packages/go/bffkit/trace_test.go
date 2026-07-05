@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/metadata"
 )
@@ -74,6 +76,12 @@ func TestTraceFilter_logsErrorCodeForFailure(t *testing.T) {
 }
 
 func TestOutgoingGRPCContext_propagatesTraceMetadata(t *testing.T) {
+	originalPropagator := otel.GetTextMapPropagator()
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() {
+		otel.SetTextMapPropagator(originalPropagator)
+	})
+
 	traceID := "4bf92f3577b34da6a3ce929d0e0e4736"
 	spanID := "00f067aa0ba902b7"
 	parsedTraceID, err := oteltrace.TraceIDFromHex(traceID)

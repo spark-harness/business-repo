@@ -57,6 +57,35 @@ func TestOriginationClient_CreateCallsOriginationAPIOverGRPC(t *testing.T) {
 	}
 }
 
+func TestOriginationClient_UsesConfiguredGRPCTargetWithoutConsul(t *testing.T) {
+	server := newOriginationGRPCTestServer(t, &fakeOriginationServer{
+		createResponse: &originationv1pb.CreateLoanApplicationResponse{
+			ApplicationId: "app_direct",
+			Status:        "draft",
+			CurrentStep:   "loan_request",
+		},
+	})
+
+	client := NewOriginationClient(&conf.Origination{
+		Consul: conf.Consul{Address: "127.0.0.1:1", ServiceName: "missing-origination-api"},
+		GRPC:   conf.GRPC{Target: server.target, Timeout: "1s", Plaintext: true},
+	})
+	result, err := client.CreateLoanApplication(context.Background(), biz.CreateLoanApplicationCommand{
+		ApplicantID:    "applicant_001",
+		IdempotencyKey: "idem-direct",
+		RawRequest:     json.RawMessage(`{"productCode":"PIL","quoteId":"quote_123","loan":{"amount":"100000.00","term":12,"purpose":"debt_consolidation"}}`),
+	})
+	if err != nil {
+		t.Fatalf("CreateLoanApplication() error = %v", err)
+	}
+	if result.ApplicationID != "app_direct" {
+		t.Fatalf("application id = %q", result.ApplicationID)
+	}
+	if server.fake.lastCreate.GetIdempotencyKey() != "idem-direct" {
+		t.Fatalf("request = %#v", server.fake.lastCreate)
+	}
+}
+
 func TestOriginationClient_GetReturnsDetailOverGRPC(t *testing.T) {
 	server := newOriginationGRPCTestServer(t, &fakeOriginationServer{
 		getResponse: &originationv1pb.GetLoanApplicationResponse{

@@ -41,11 +41,13 @@ type ApplicantAuthClient struct {
 func NewApplicantAuthClient(c *conf.Applicant) *ApplicantAuthClient {
 	timeout := 3 * time.Second
 	plaintext := true
+	target := ""
 	if c != nil {
 		if parsed, err := time.ParseDuration(c.GRPC.Timeout); err == nil && parsed > 0 {
 			timeout = parsed
 		}
 		plaintext = c.GRPC.Plaintext
+		target = c.GRPC.Target
 	}
 	opts := []grpc.DialOption{}
 	if plaintext {
@@ -54,7 +56,7 @@ func NewApplicantAuthClient(c *conf.Applicant) *ApplicantAuthClient {
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
 	}
 	return &ApplicantAuthClient{
-		resolver:    NewConsulResolver(c),
+		resolver:    grpcResolver(target, NewConsulResolver(c)),
 		timeout:     timeout,
 		dialOptions: opts,
 	}

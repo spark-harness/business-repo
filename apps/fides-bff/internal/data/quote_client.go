@@ -45,12 +45,14 @@ func NewQuoteClient(c *conf.Quote) *QuoteClient {
 	timeout := 3 * time.Second
 	plaintext := true
 	consul := conf.Consul{}
+	target := ""
 	if c != nil {
 		consul = c.Consul
 		if parsed, err := time.ParseDuration(c.GRPC.Timeout); err == nil && parsed > 0 {
 			timeout = parsed
 		}
 		plaintext = c.GRPC.Plaintext
+		target = c.GRPC.Target
 	}
 	opts := []grpc.DialOption{}
 	if plaintext {
@@ -59,7 +61,7 @@ func NewQuoteClient(c *conf.Quote) *QuoteClient {
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
 	}
 	return &QuoteClient{
-		resolver:    NewQuoteGRPCConsulResolver(consul),
+		resolver:    grpcResolver(target, NewQuoteGRPCConsulResolver(consul)),
 		timeout:     timeout,
 		dialOptions: opts,
 	}

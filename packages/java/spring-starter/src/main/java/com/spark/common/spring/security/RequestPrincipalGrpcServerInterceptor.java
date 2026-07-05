@@ -6,8 +6,9 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
+import org.springframework.core.Ordered;
 
-public class RequestPrincipalGrpcServerInterceptor implements ServerInterceptor {
+public class RequestPrincipalGrpcServerInterceptor implements ServerInterceptor, Ordered {
     public static final Metadata.Key<String> APPLICANT_ID_METADATA_KEY =
             Metadata.Key.of("x-applicant-id", Metadata.ASCII_STRING_MARSHALLER);
     private final String unauthenticatedDescription;
@@ -18,6 +19,11 @@ public class RequestPrincipalGrpcServerInterceptor implements ServerInterceptor 
 
     public RequestPrincipalGrpcServerInterceptor(String unauthenticatedDescription) {
         this.unauthenticatedDescription = unauthenticatedDescription;
+    }
+
+    @Override
+    public int getOrder() {
+        return Ordered.HIGHEST_PRECEDENCE + 100;
     }
 
     @Override

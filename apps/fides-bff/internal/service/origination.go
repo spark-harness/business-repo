@@ -33,8 +33,6 @@ func (s *OriginationService) CreateLoanApplication(ctx context.Context, req *fid
 	result, err := s.uc.CreateLoanApplication(ctx, biz.CreateLoanApplicationCommand{
 		ApplicantID:    principal.ApplicantID,
 		IdempotencyKey: headers.Get(bffkit.HeaderIdempotencyKey),
-		TraceParent:    headers.Get(bffkit.HeaderTraceParent),
-		TraceState:     headers.Get(bffkit.HeaderTraceState),
 		RawRequest:     raw,
 	})
 	if err != nil {
@@ -48,12 +46,9 @@ func (s *OriginationService) GetLoanApplication(ctx context.Context, req *fidesb
 	if !ok {
 		return nil, bffkit.UnauthorizedError()
 	}
-	headers := requestHeaders(ctx)
 	result, err := s.uc.GetLoanApplication(ctx, biz.GetLoanApplicationCommand{
 		ApplicantID:   principal.ApplicantID,
 		ApplicationID: req.GetApplicationId(),
-		TraceParent:   headers.Get(bffkit.HeaderTraceParent),
-		TraceState:    headers.Get(bffkit.HeaderTraceState),
 	})
 	if err != nil {
 		return nil, originationHTTPError(err)
@@ -75,8 +70,6 @@ func (s *OriginationService) UpdateLoanApplication(ctx context.Context, req *fid
 		ApplicantID:    principal.ApplicantID,
 		ApplicationID:  req.GetApplicationId(),
 		IdempotencyKey: headers.Get(bffkit.HeaderIdempotencyKey),
-		TraceParent:    headers.Get(bffkit.HeaderTraceParent),
-		TraceState:     headers.Get(bffkit.HeaderTraceState),
 		RawRequest:     raw,
 	})
 	if err != nil {

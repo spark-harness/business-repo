@@ -19,6 +19,7 @@ import (
 type Shutdown func(context.Context) error
 
 func Setup(ctx context.Context, c conf.OTel, serviceName string, fallbackRelease string) (Shutdown, error) {
+	otel.SetTextMapPropagator(propagation.TraceContext{})
 	if !c.Enabled {
 		return func(context.Context) error { return nil }, nil
 	}
@@ -53,7 +54,6 @@ func Setup(ctx context.Context, c conf.OTel, serviceName string, fallbackRelease
 		sdktrace.WithResource(res),
 	)
 	otel.SetTracerProvider(provider)
-	otel.SetTextMapPropagator(propagation.TraceContext{})
 	return provider.Shutdown, nil
 }
 

@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/spark/fides-bff/internal/biz"
+	"github.com/spark/fides-bff/internal/conf"
 )
 
 func TestApplicantAuthClient_SendOtpCallsApplicantGRPC(t *testing.T) {
@@ -51,7 +52,37 @@ func TestApplicantAuthClient_SendOtpCallsApplicantGRPC(t *testing.T) {
 	}
 }
 
+func TestApplicantAuthClient_UsesConfiguredGRPCTargetWithoutConsul(t *testing.T) {
+	server := newApplicantGRPCTestServer(t, &fakeApplicantServer{
+		sendResponse: &applicantv1pb.SendOtpResponse{
+			ChallengeId:    "challenge-direct",
+			ExpiresInSec:   300,
+			ResendAfterSec: 60,
+		},
+	})
+
+	client := NewApplicantAuthClient(&conf.Applicant{
+		Consul: conf.Consul{Address: "127.0.0.1:1", ServiceName: "missing-applicant-api"},
+		GRPC:   conf.GRPC{Target: server.target, Timeout: "1s", Plaintext: true},
+	})
+	result, err := client.SendOtp(context.Background(), biz.SendOtpCommand{
+		CountryCode:    "+852",
+		Phone:          "91234567",
+		IdempotencyKey: "idem-direct",
+	})
+	if err != nil {
+		t.Fatalf("send otp: %v", err)
+	}
+	if result.ChallengeID != "challenge-direct" {
+		t.Fatalf("challenge id = %q", result.ChallengeID)
+	}
+	if server.fake.lastSend.GetIdempotencyKey() != "idem-direct" {
+		t.Fatalf("request = %#v", server.fake.lastSend)
+	}
+}
+
 func TestApplicantAuthClient_SendOtpPropagatesTraceMetadata(t *testing.T) {
+	withTraceContextPropagator(t)
 	server := newApplicantGRPCTestServer(t, &fakeApplicantServer{
 		sendResponse: &applicantv1pb.SendOtpResponse{
 			ChallengeId:    "challenge-1",

@@ -16,6 +16,7 @@ applicant:
   grpc:
     timeout: "${APPLICANT_GRPC_TIMEOUT:3s}"
     plaintext: "${APPLICANT_GRPC_PLAINTEXT:true}"
+    target: "${APPLICANT_GRPC_TARGET:}"
 quote:
   consul:
     address: "${QUOTE_CONSUL_ADDRESS:127.0.0.1:8500}"
@@ -24,6 +25,7 @@ quote:
   grpc:
     timeout: "${QUOTE_GRPC_TIMEOUT:3s}"
     plaintext: "${QUOTE_GRPC_PLAINTEXT:true}"
+    target: "${QUOTE_GRPC_TARGET:}"
 origination:
   consul:
     address: "${ORIGINATION_CONSUL_ADDRESS:127.0.0.1:8500}"
@@ -32,6 +34,7 @@ origination:
   grpc:
     timeout: "${ORIGINATION_GRPC_TIMEOUT:3s}"
     plaintext: "${ORIGINATION_GRPC_PLAINTEXT:true}"
+    target: "${ORIGINATION_GRPC_TARGET:}"
 auth:
   token_mode: "${AUTH_TOKEN_MODE:hmac}"
   token_secret: "${AUTH_TOKEN_SECRET:}"

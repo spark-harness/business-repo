@@ -25,6 +25,21 @@ import io.grpc.Status;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.StreamObserver;
+import io.opentelemetry.api.baggage.Baggage;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.baggage.propagation.W3CBaggagePropagator;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
+import io.opentelemetry.api.trace.TraceFlags;
+import io.opentelemetry.api.trace.TraceState;
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
+import io.opentelemetry.context.propagation.ContextPropagators;
+import io.opentelemetry.context.propagation.TextMapPropagator;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.samplers.Sampler;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.UUID;
@@ -34,10 +49,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.context.request.RequestContextHolder;
 
 class GrpcQuoteGatewayTest {
+    private static final Metadata.Key<String> TRACEPARENT_METADATA_KEY =
+            Metadata.Key.of("traceparent", Metadata.ASCII_STRING_MARSHALLER);
+    private static final Metadata.Key<String> BAGGAGE_METADATA_KEY =
+            Metadata.Key.of("baggage", Metadata.ASCII_STRING_MARSHALLER);
     private FakeQuoteService quoteService;
     private Server server;
     private ManagedChannel channel;
     private GrpcQuoteGateway gateway;
+    private SdkTracerProvider tracerProvider;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -49,7 +69,13 @@ class GrpcQuoteGatewayTest {
                 .build()
                 .start();
         channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
-        gateway = new GrpcQuoteGateway(QuoteServiceGrpc.newBlockingStub(channel), Duration.ofSeconds(1));
+        tracerProvider = SdkTracerProvider.builder().setSampler(Sampler.alwaysOn()).build();
+        OpenTelemetry openTelemetry = OpenTelemetrySdk.builder()
+                .setTracerProvider(tracerProvider)
+                .setPropagators(ContextPropagators.create(TextMapPropagator.composite(
+                        W3CTraceContextPropagator.getInstance(), W3CBaggagePropagator.getInstance())))
+                .build();
+        gateway = new GrpcQuoteGateway(QuoteServiceGrpc.newBlockingStub(channel), Duration.ofSeconds(1), openTelemetry);
         TestPrincipal.set("applicant_001");
     }
 
@@ -60,6 +86,9 @@ class GrpcQuoteGatewayTest {
         }
         if (server != null) {
             server.shutdownNow();
+        }
+        if (tracerProvider != null) {
+            tracerProvider.close();
         }
         RequestContextHolder.resetRequestAttributes();
     }
@@ -77,6 +106,42 @@ class GrpcQuoteGatewayTest {
         assertThat(quote.amount()).isEqualByComparingTo("100000.00");
         assertThat(quote.term()).isEqualTo(12);
         assertThat(quote.purpose()).isEqualTo("debt_consolidation");
+    }
+
+    @Test
+    void get_whenCurrentTraceExists_forwardsTraceContextWithNewClientSpan() {
+        String traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+        String parentSpanId = "00f067aa0ba902b7";
+        quoteService.quote = quote("quote_1");
+        SpanContext parentContext = SpanContext.createFromRemoteParent(
+                traceId, parentSpanId, TraceFlags.getSampled(), TraceState.getDefault());
+
+        AcceptedQuote quote;
+        try (Scope ignored = Context.current().with(Span.wrap(parentContext)).makeCurrent()) {
+            quote = gateway.get("quote_1");
+        }
+
+        assertThat(quote.quoteId()).isEqualTo("quote_1");
+        String traceparent = quoteService.lastTraceparent;
+        assertThat(traceparent).startsWith("00-" + traceId + "-");
+        assertThat(traceparent).doesNotContain(parentSpanId);
+    }
+
+    @Test
+    void get_whenCurrentBaggageExists_doesNotForwardBaggage() {
+        quoteService.quote = quote("quote_1");
+        Context context = Baggage.builder()
+                .put("sensitive", "secret")
+                .build()
+                .storeInContext(Context.current());
+
+        AcceptedQuote quote;
+        try (Scope ignored = context.makeCurrent()) {
+            quote = gateway.get("quote_1");
+        }
+
+        assertThat(quote.quoteId()).isEqualTo("quote_1");
+        assertThat(quoteService.lastBaggage).isNull();
     }
 
     @Test
@@ -132,6 +197,8 @@ class GrpcQuoteGatewayTest {
         private RuntimeException error;
         private GetQuoteRequest lastRequest;
         private String lastApplicantId;
+        private String lastTraceparent;
+        private String lastBaggage;
 
         @Override
         public void getQuote(GetQuoteRequest request, StreamObserver<GetQuoteResponse> responseObserver) {
@@ -156,6 +223,8 @@ class GrpcQuoteGatewayTest {
         public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
                 ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
             quoteService.lastApplicantId = headers.get(RequestPrincipalGrpcServerInterceptor.APPLICANT_ID_METADATA_KEY);
+            quoteService.lastTraceparent = headers.get(TRACEPARENT_METADATA_KEY);
+            quoteService.lastBaggage = headers.get(BAGGAGE_METADATA_KEY);
             return next.startCall(call, headers);
         }
     }

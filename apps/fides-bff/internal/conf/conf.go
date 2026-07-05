@@ -56,6 +56,7 @@ type Consul struct {
 type GRPC struct {
 	Timeout   string `json:"timeout"`
 	Plaintext bool   `json:"plaintext"`
+	Target    string `json:"target"`
 }
 
 type Auth struct {

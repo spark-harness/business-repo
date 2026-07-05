@@ -24,24 +24,18 @@ type OriginationClient interface {
 type CreateLoanApplicationCommand struct {
 	ApplicantID    string
 	IdempotencyKey string
-	TraceParent    string
-	TraceState     string
 	RawRequest     json.RawMessage
 }
 
 type GetLoanApplicationCommand struct {
 	ApplicantID   string
 	ApplicationID string
-	TraceParent   string
-	TraceState    string
 }
 
 type PatchLoanApplicationCommand struct {
 	ApplicantID    string
 	ApplicationID  string
 	IdempotencyKey string
-	TraceParent    string
-	TraceState     string
 	RawRequest     json.RawMessage
 }
 
