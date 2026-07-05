@@ -35,15 +35,11 @@ type UpsertIdentityProfileCommand struct {
 	ApplicantID   string
 	ApplicationID string
 	Profile       IdentityProfile
-	TraceParent   string
-	TraceState    string
 }
 
 type GetIdentityProfileCommand struct {
 	ApplicantID   string
 	ApplicationID string
-	TraceParent   string
-	TraceState    string
 }
 
 type GetIdentityProfileResult struct {
@@ -54,8 +50,6 @@ type GetIdentityProfileResult struct {
 type AdvanceApplicationStepCommand struct {
 	ApplicantID   string
 	ApplicationID string
-	TraceParent   string
-	TraceState    string
 }
 
 type AdvanceApplicationStepResult struct {
@@ -106,8 +100,6 @@ func (uc *IdentityProfileUsecase) Upsert(ctx context.Context, command UpsertIden
 	step, err := uc.origination.AdvanceApplicationStep(ctx, AdvanceApplicationStepCommand{
 		ApplicantID:   command.ApplicantID,
 		ApplicationID: command.ApplicationID,
-		TraceParent:   command.TraceParent,
-		TraceState:    command.TraceState,
 	})
 	if err != nil {
 		return UpsertIdentityProfileResult{}, err

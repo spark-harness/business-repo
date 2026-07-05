@@ -9,6 +9,14 @@
     <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION"/>
   </Match>
   <Match>
+    <Class name="com.spark.common.spring.cleanarchitecture.grpc.OpenTelemetryGrpcServerInterceptor"/>
+    <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION"/>
+  </Match>
+  <Match>
+    <Class name="com.spark.common.spring.cleanarchitecture.grpc.OpenTelemetryGrpcServerInterceptor$TraceContextServerCallListener"/>
+    <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION"/>
+  </Match>
+  <Match>
     <Class name="com.spark.applicant.bootstrap.ApplicantAuthProperties"/>
     <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
   </Match>

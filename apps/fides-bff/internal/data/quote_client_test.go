@@ -64,6 +64,35 @@ func TestQuoteClient_CreateQuoteCallsQuoteAPIOverGRPC(t *testing.T) {
 	}
 }
 
+func TestQuoteClient_UsesConfiguredGRPCTargetWithoutConsul(t *testing.T) {
+	server := newQuoteGRPCTestServer(t, &fakeQuoteServer{
+		createResponse: &quotev1pb.CreateQuoteResponse{
+			Quote: &quotev1pb.Quote{QuoteId: "quote_direct", ValidUntil: "2026-06-28T03:00:00Z"},
+		},
+	})
+
+	client := NewQuoteClient(&conf.Quote{
+		Consul: conf.Consul{Address: "127.0.0.1:1", ServiceName: "missing-quote-api"},
+		GRPC:   conf.GRPC{Target: server.target, Timeout: "1s", Plaintext: true},
+	})
+	result, err := client.CreateQuote(context.Background(), biz.CreateQuoteCommand{
+		ApplicantID: "applicant_001",
+		ProductCode: "PIL",
+		Amount:      []byte(`"100000.00"`),
+		Term:        12,
+		Purpose:     "debt_consolidation",
+	})
+	if err != nil {
+		t.Fatalf("CreateQuote() error = %v", err)
+	}
+	if result.QuoteID != "quote_direct" {
+		t.Fatalf("quote id = %q", result.QuoteID)
+	}
+	if server.fake.lastCreate.GetProductCode() != "PIL" {
+		t.Fatalf("request = %#v", server.fake.lastCreate)
+	}
+}
+
 func TestQuoteClient_CreateQuoteMapsGRPCErrors(t *testing.T) {
 	tests := []struct {
 		name     string

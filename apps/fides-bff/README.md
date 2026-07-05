@@ -56,6 +56,16 @@ Service name: applicant-api
 
 `fides-bff` 不保存 OTP 状态，也不硬编码 applicant 地址；如果 Consul 没有健康的 `applicant-api` 实例，auth API 返回统一错误信封，错误码为 `applicant_unavailable`。
 
+本地联调也可以绕过 Consul，直接指定 gRPC target：
+
+```bash
+REGISTRY_CONSUL_ENABLED=false \
+APPLICANT_GRPC_TARGET=127.0.0.1:19092 \
+QUOTE_GRPC_TARGET=127.0.0.1:19090 \
+ORIGINATION_GRPC_TARGET=127.0.0.1:19091 \
+make run
+```
+
 OpenTelemetry 通过官方 SDK 和 OTLP exporter 初始化。默认 `observability.otel.enabled=false`；启用时设置通用 OTLP endpoint、protocol 和 headers，可指向 OpenTelemetry Collector，也可按 Sentry Direct OTLP 的项目 endpoint 直连。应用代码不依赖 Sentry SDK、Sentry exporter 或供应商专用 span processor。
 
 本地验证 Sentry Direct OTLP 时，按 DSN 拆出 host、project id、public key 后配置：
@@ -110,6 +120,7 @@ applicant:
   grpc:
     timeout: "${APPLICANT_GRPC_TIMEOUT:3s}"
     plaintext: "${APPLICANT_GRPC_PLAINTEXT:true}"
+    target: "${APPLICANT_GRPC_TARGET:}"
 registry:
   consul:
     enabled: "${REGISTRY_CONSUL_ENABLED:true}"

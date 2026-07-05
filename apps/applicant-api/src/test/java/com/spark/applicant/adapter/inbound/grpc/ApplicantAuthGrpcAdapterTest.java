@@ -3,6 +3,7 @@ package com.spark.applicant.adapter.inbound.grpc;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.spark.common.spring.cleanarchitecture.grpc.OpenTelemetryGrpcServerInterceptor;
 import com.spark.applicant.application.auth.AuthPolicy;
 import com.spark.applicant.application.auth.RefreshTokenUseCase;
 import com.spark.applicant.application.auth.SendOtpUseCase;
@@ -29,6 +30,7 @@ import io.grpc.ForwardingClientCallListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ServerInterceptors;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -80,12 +82,13 @@ class ApplicantAuthGrpcAdapterTest {
 
         server = InProcessServerBuilder.forName(serverName)
                 .directExecutor()
-                .addService(new ApplicantAuthGrpcAdapter(
-                        sendOtpUseCase,
-                        verifyOtpUseCase,
-                        refreshTokenUseCase,
-                        new SimpleMeterRegistry(),
-                        OPEN_TELEMETRY.getOpenTelemetry()))
+                .addService(ServerInterceptors.intercept(
+                        new ApplicantAuthGrpcAdapter(
+                                sendOtpUseCase,
+                                verifyOtpUseCase,
+                                refreshTokenUseCase,
+                                new SimpleMeterRegistry()),
+                        new OpenTelemetryGrpcServerInterceptor(OPEN_TELEMETRY.getOpenTelemetry())))
                 .build()
                 .start();
         channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();

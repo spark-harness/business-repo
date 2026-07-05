@@ -181,7 +181,7 @@ func OutgoingGRPCContext(ctx context.Context) context.Context {
 	traceID, _ := TraceIDFromContext(ctx)
 	correlationID, _ := CorrelationIDFromContext(ctx)
 	carrier := propagation.MapCarrier{}
-	propagation.TraceContext{}.Inject(ctx, carrier)
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
 	kvs := make([]string, 0, 4)
 	if traceID != "" {
 		kvs = append(kvs, strings.ToLower(HeaderTraceID), traceID)

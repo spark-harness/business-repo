@@ -52,12 +52,14 @@ func NewOriginationClient(c *conf.Origination) *OriginationClient {
 	timeout := 3 * time.Second
 	plaintext := true
 	consul := conf.Consul{}
+	target := ""
 	if c != nil {
 		consul = c.Consul
 		if parsed, err := time.ParseDuration(c.GRPC.Timeout); err == nil && parsed > 0 {
 			timeout = parsed
 		}
 		plaintext = c.GRPC.Plaintext
+		target = c.GRPC.Target
 	}
 	opts := []grpc.DialOption{}
 	if plaintext {
@@ -66,7 +68,7 @@ func NewOriginationClient(c *conf.Origination) *OriginationClient {
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
 	}
 	return &OriginationClient{
-		resolver:    NewOriginationGRPCConsulResolver(consul),
+		resolver:    grpcResolver(target, NewOriginationGRPCConsulResolver(consul)),
 		timeout:     timeout,
 		dialOptions: opts,
 	}

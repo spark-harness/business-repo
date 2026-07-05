@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.spark.common.spring.cleanarchitecture.autoconfigure.GrpcServerAutoConfiguration;
 import com.spark.common.spring.cleanarchitecture.grpc.GrpcServerLifecycle;
+import com.spark.common.spring.cleanarchitecture.grpc.OpenTelemetryGrpcServerInterceptor;
 import io.grpc.BindableService;
 import io.grpc.ServerServiceDefinition;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,9 @@ class GrpcServerAutoConfigurationTest {
         contextRunner
                 .withBean(BindableService.class, TestBindableService::new)
                 .withPropertyValues("spark.grpc.server.port=0")
-                .run(context -> assertThat(context).hasSingleBean(GrpcServerLifecycle.class));
+                .run(context -> assertThat(context)
+                        .hasSingleBean(GrpcServerLifecycle.class)
+                        .hasSingleBean(OpenTelemetryGrpcServerInterceptor.class));
     }
 
     @Test

@@ -26,7 +26,6 @@ func (s *IdentityProfileService) UpsertIdentityProfile(ctx context.Context, req 
 	if !ok {
 		return nil, bffkit.UnauthorizedError()
 	}
-	headers := requestHeaders(ctx)
 	profile := req.GetProfile()
 	result, err := s.uc.Upsert(ctx, biz.UpsertIdentityProfileCommand{
 		ApplicantID:   principal.ApplicantID,
@@ -40,8 +39,6 @@ func (s *IdentityProfileService) UpsertIdentityProfile(ctx context.Context, req 
 			Nationality:    nationalityFromProto(profile.GetNationality()),
 			DateOfBirth:    profile.GetDateOfBirth(),
 		},
-		TraceParent: headers.Get(bffkit.HeaderTraceParent),
-		TraceState:  headers.Get(bffkit.HeaderTraceState),
 	})
 	if err != nil {
 		return nil, identityProfileHTTPError(err)
@@ -57,12 +54,9 @@ func (s *IdentityProfileService) GetIdentityProfile(ctx context.Context, req *fi
 	if !ok {
 		return nil, bffkit.UnauthorizedError()
 	}
-	headers := requestHeaders(ctx)
 	result, err := s.uc.Get(ctx, biz.GetIdentityProfileCommand{
 		ApplicantID:   principal.ApplicantID,
 		ApplicationID: req.GetApplicationId(),
-		TraceParent:   headers.Get(bffkit.HeaderTraceParent),
-		TraceState:    headers.Get(bffkit.HeaderTraceState),
 	})
 	if err != nil {
 		return nil, identityProfileHTTPError(err)

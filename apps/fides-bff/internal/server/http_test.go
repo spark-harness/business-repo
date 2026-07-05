@@ -425,7 +425,7 @@ func TestHTTPServer_LoanApplication_rejectsInvalidToken(t *testing.T) {
 	}
 }
 
-func TestHTTPServer_LoanApplicationCreate_callsOriginationWithPrincipalTraceAndIdempotency(t *testing.T) {
+func TestHTTPServer_LoanApplicationCreate_callsOriginationWithPrincipalAndIdempotency(t *testing.T) {
 	originationClient := &fakeOriginationClient{
 		summary: biz.LoanApplicationSummary{
 			ApplicationID: "app_123",
@@ -456,12 +456,6 @@ func TestHTTPServer_LoanApplicationCreate_callsOriginationWithPrincipalTraceAndI
 	}
 	if originationClient.createCommand.IdempotencyKey != "idem-create" {
 		t.Fatalf("idempotency key = %q, want idem-create", originationClient.createCommand.IdempotencyKey)
-	}
-	if originationClient.createCommand.TraceParent == "" {
-		t.Fatal("traceparent was not propagated")
-	}
-	if originationClient.createCommand.TraceState != "vendor=state" {
-		t.Fatalf("tracestate = %q, want vendor=state", originationClient.createCommand.TraceState)
 	}
 	if originationClient.createOperation != fidesbffv1pb.OperationFidesBffLoanApplicationServiceCreateLoanApplication {
 		t.Fatalf("operation = %q, want %q", originationClient.createOperation, fidesbffv1pb.OperationFidesBffLoanApplicationServiceCreateLoanApplication)
