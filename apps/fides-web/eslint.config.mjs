@@ -16,6 +16,31 @@ const eslintConfig = defineConfig([
             "MemberExpression[object.object.name='process'][object.property.name='env']",
           message: "Read process.env only through src/config/env.ts.",
         },
+        {
+          selector: "CallExpression[callee.object.name='console']",
+          message: "Use the unified fides-web server logger instead of console output.",
+        },
+        {
+          selector: "MemberExpression[property.name='console']",
+          message: "Use the unified fides-web server logger instead of console output.",
+        },
+        {
+          selector: "Identifier[name='console']",
+          message: "Use the unified fides-web server logger instead of console output.",
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/infrastructure/observability/server-logger.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "MemberExpression[object.object.name='process'][object.property.name='env']",
+          message: "Read process.env only through src/config/env.ts.",
+        },
       ],
     },
   },

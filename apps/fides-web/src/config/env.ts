@@ -75,6 +75,11 @@ export function getFidesEnv(): FidesEnv {
   return fidesEnvSchema.parse(process.env);
 }
 
+export function getRuntimeEnvironmentFromEnv(): string {
+  const parsed = fidesEnvSchema.shape.FIDES_RUNTIME_ENV.safeParse(process.env.FIDES_RUNTIME_ENV);
+  return parsed.success ? parsed.data : "local";
+}
+
 export function getSmokeEnv(): SmokeEnv {
   return smokeEnvSchema.parse(process.env);
 }
