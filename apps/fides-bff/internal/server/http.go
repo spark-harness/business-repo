@@ -1,14 +1,18 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
+	"log/slog"
 	nethttp "net/http"
 	"strings"
 
-	"github.com/go-kratos/kratos/v2/log"
-	khttp "github.com/go-kratos/kratos/v2/transport/http"
+	khttp "github.com/go-kratos/kratos/v3/transport/http"
 	fidesbffv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/fides-bff/v1"
 	"github.com/spark/bffkit"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/spark/fides-bff/internal/conf"
 	"github.com/spark/fides-bff/internal/service"
@@ -24,13 +28,14 @@ func NewHTTPServer(
 	identityProfile *service.IdentityProfileService,
 	tokenValidator bffkit.TokenValidator,
 	store bffkit.IdempotencyStore,
-	logger log.Logger,
+	logger *slog.Logger,
 ) *khttp.Server {
 	opts := []khttp.ServerOption{
+		khttp.RequestDecoder(compatRequestDecoder),
 		khttp.ErrorEncoder(bffkit.ErrorEncoder),
 		khttp.ResponseEncoder(compatResponseEncoder),
 		khttp.Filter(
-			bffkit.TraceFilter(log.NewHelper(logger)),
+			bffkit.TraceFilter(logger),
 			bffkit.CORSFilter(bffkit.CORSConfig{
 				AllowedOrigins: c.CORS.AllowedOrigins,
 				AllowedMethods: []string{
@@ -62,6 +67,29 @@ func NewHTTPServer(
 	fidesbffv1pb.RegisterFidesBffLoanApplicationServiceHTTPServer(srv, origination)
 	fidesbffv1pb.RegisterFidesBffIdentityProfileServiceHTTPServer(srv, identityProfile)
 	return srv
+}
+
+func compatRequestDecoder(r *nethttp.Request, v any) error {
+	message, ok := v.(proto.Message)
+	if !ok {
+		return khttp.DefaultRequestDecoder(r, v)
+	}
+	data, err := io.ReadAll(r.Body)
+	r.Body = io.NopCloser(bytes.NewBuffer(data))
+	if err != nil {
+		return invalidRequestBodyError()
+	}
+	if len(data) == 0 {
+		return nil
+	}
+	if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(data, message); err != nil {
+		return invalidRequestBodyError()
+	}
+	return nil
+}
+
+func invalidRequestBodyError() *bffkit.HTTPError {
+	return bffkit.ValidationError([]bffkit.FieldError{{Field: "body", Message: "invalid request body"}})
 }
 
 func protectedPathAuthFilter(tokenValidator bffkit.TokenValidator) khttp.FilterFunc {
@@ -114,6 +142,15 @@ func compatResponseEncoder(w nethttp.ResponseWriter, r *nethttp.Request, v any) 
 		}
 		return writeJSON(w, body)
 	default:
+		if message, ok := v.(proto.Message); ok {
+			data, err := (protojson.MarshalOptions{EmitUnpopulated: true}).Marshal(message)
+			if err != nil {
+				return err
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, err = w.Write(data)
+			return err
+		}
 		return khttp.DefaultResponseEncoder(w, r, v)
 	}
 }

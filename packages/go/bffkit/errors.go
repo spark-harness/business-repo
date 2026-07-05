@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"strconv"
 
-	kerrors "github.com/go-kratos/kratos/v2/errors"
-	"github.com/go-kratos/kratos/v2/transport/http/binding"
+	"github.com/go-kratos/kratos/v3/encoding"
+	"github.com/go-kratos/kratos/v3/encoding/form"
+	kerrors "github.com/go-kratos/kratos/v3/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -146,7 +147,10 @@ func codeFromHTTPStatus(status int) string {
 }
 
 func RequestDecoder(r *http.Request, v any) error {
-	if err := binding.BindForm(r, v); err != nil {
+	if err := r.ParseForm(); err != nil {
+		return ValidationError([]FieldError{{Field: "", Message: err.Error()}})
+	}
+	if err := encoding.GetCodec(form.Name).Unmarshal([]byte(r.Form.Encode()), v); err != nil {
 		return ValidationError([]FieldError{{Field: "", Message: err.Error()}})
 	}
 	return nil

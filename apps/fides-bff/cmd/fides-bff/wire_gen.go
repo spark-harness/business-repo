@@ -7,14 +7,14 @@
 package main
 
 import (
-	"github.com/go-kratos/kratos/v2"
-	"github.com/go-kratos/kratos/v2/log"
+	"github.com/go-kratos/kratos/v3"
 	"github.com/spark/bffkit"
 	"github.com/spark/fides-bff/internal/biz"
 	"github.com/spark/fides-bff/internal/conf"
 	"github.com/spark/fides-bff/internal/data"
 	"github.com/spark/fides-bff/internal/server"
 	"github.com/spark/fides-bff/internal/service"
+	"log/slog"
 	"time"
 )
 
@@ -26,7 +26,7 @@ import (
 // (biz/service/server) stay free of the wire DI framework, per the team
 // backend clean-architecture rule that domain/application must not depend on
 // DI frameworks.
-func wireApp(confServer *conf.Server, applicant *conf.Applicant, quote *conf.Quote, origination *conf.Origination, authConf *conf.Auth, registry *conf.Registry, version biz.Version, logger log.Logger) (*kratos.App, func(), error) {
+func wireApp(confServer *conf.Server, applicant *conf.Applicant, quote *conf.Quote, origination *conf.Origination, auth *conf.Auth, registry *conf.Registry, version biz.Version, logger *slog.Logger) (*kratos.App, func(), error) {
 	healthUsecase := biz.NewHealthUsecase(version)
 	healthService := service.NewHealthService(healthUsecase)
 	applicantAuthClient := data.NewApplicantAuthClient(applicant)
@@ -40,7 +40,7 @@ func wireApp(confServer *conf.Server, applicant *conf.Applicant, quote *conf.Quo
 	originationService := service.NewOriginationService(originationUsecase)
 	identityProfileUsecase := biz.NewIdentityProfileUsecase(applicantAuthClient, originationClient)
 	identityProfileService := service.NewIdentityProfileService(identityProfileUsecase)
-	sessionTokenValidator := data.NewSessionTokenValidator(authConf)
+	sessionTokenValidator := data.NewSessionTokenValidator(auth)
 	idempotencyStore := newIdempotencyStore()
 	httpServer := server.NewHTTPServer(confServer, healthService, authService, pricingService, originationService, identityProfileService, sessionTokenValidator, idempotencyStore, logger)
 	mainRegistration, err := newConsulRegistration(registry)
