@@ -6,10 +6,10 @@
 package main
 
 import (
+	"log/slog"
 	"time"
 
-	"github.com/go-kratos/kratos/v2"
-	"github.com/go-kratos/kratos/v2/log"
+	"github.com/go-kratos/kratos/v3"
 	"github.com/google/wire"
 	"github.com/spark/bffkit"
 
@@ -26,7 +26,7 @@ import (
 // (biz/service/server) stay free of the wire DI framework, per the team
 // backend clean-architecture rule that domain/application must not depend on
 // DI frameworks.
-func wireApp(*conf.Server, *conf.Applicant, *conf.Quote, *conf.Origination, *conf.Auth, *conf.Registry, biz.Version, log.Logger) (*kratos.App, func(), error) {
+func wireApp(*conf.Server, *conf.Applicant, *conf.Quote, *conf.Origination, *conf.Auth, *conf.Registry, biz.Version, *slog.Logger) (*kratos.App, func(), error) {
 	panic(wire.Build(
 		biz.NewHealthUsecase,
 		biz.NewAuthUsecase,

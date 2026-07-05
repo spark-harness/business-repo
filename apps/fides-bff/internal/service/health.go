@@ -3,7 +3,7 @@ package service
 import (
 	nethttp "net/http"
 
-	"github.com/go-kratos/kratos/v2/transport/http"
+	"github.com/go-kratos/kratos/v3/transport/http"
 
 	"github.com/spark/fides-bff/internal/biz"
 )

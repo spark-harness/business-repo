@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kratos/kratos/v2/errors"
-	"github.com/go-kratos/kratos/v2/log"
-	"github.com/go-kratos/kratos/v2/transport"
-	khttp "github.com/go-kratos/kratos/v2/transport/http"
+	"log/slog"
+
+	"github.com/go-kratos/kratos/v3/errors"
+	"github.com/go-kratos/kratos/v3/transport"
+	khttp "github.com/go-kratos/kratos/v3/transport/http"
 	fidesbffv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/fides-bff/v1"
 	"github.com/spark/bffkit"
 
@@ -146,7 +147,7 @@ func TestHTTPServer_CORSPreflight_doesNotRequireIdempotencyKey(t *testing.T) {
 		newFakeIdentityProfileService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
-		log.DefaultLogger,
+		slog.Default(),
 	)
 
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/auth/otp:send", nil)
@@ -176,7 +177,7 @@ func TestHTTPServer_CORSPreflight_allowsIdentityProfilePut(t *testing.T) {
 		newFakeIdentityProfileService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
-		log.DefaultLogger,
+		slog.Default(),
 	)
 
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/me/identity-profile", nil)
@@ -208,7 +209,7 @@ func newTestHTTPServer(health *service.HealthService) *khttp.Server {
 		newFakeIdentityProfileService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
-		log.DefaultLogger,
+		slog.Default(),
 	)
 }
 
@@ -611,7 +612,7 @@ func TestHTTPServer_AuthSendOtp_mapsRequestAndResponse(t *testing.T) {
 		newFakeIdentityProfileService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
-		log.DefaultLogger,
+		slog.Default(),
 	)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/otp:send", strings.NewReader(`{"countryCode":"+852","phone":"91234567"}`))
@@ -640,6 +641,44 @@ func TestHTTPServer_AuthSendOtp_mapsRequestAndResponse(t *testing.T) {
 	}
 }
 
+func TestHTTPServer_AuthSendOtp_rejectsMalformedJSONWithSanitizedError(t *testing.T) {
+	srv := NewHTTPServer(
+		&conf.Server{},
+		service.NewHealthService(biz.NewHealthUsecase("test")),
+		service.NewAuthService(biz.NewAuthUsecase(&fakeApplicantAuthClient{})),
+		newFakePricingService(),
+		newFakeOriginationService(),
+		newFakeIdentityProfileService(),
+		fakeTokenValidator{applicantID: "applicant_001"},
+		bffkit.NewMemoryIdempotencyStore(0),
+		slog.Default(),
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/otp:send", strings.NewReader(`{"countryCode":`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(bffkit.HeaderIdempotencyKey, "idem-malformed")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status code = %d, want %d (body: %s)", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	}
+	var body bffkit.ErrorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Error.Code != bffkit.CodeValidation {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, bffkit.CodeValidation)
+	}
+	if body.Error.Message != "invalid request body" {
+		t.Fatalf("error message = %q, want sanitized invalid request body", body.Error.Message)
+	}
+	if strings.Contains(rec.Body.String(), "proto") || strings.Contains(rec.Body.String(), "syntax") {
+		t.Fatalf("error body exposes parser detail: %s", rec.Body.String())
+	}
+}
+
 func TestHTTPServer_AuthVerifyOtp_mapsExpiredError(t *testing.T) {
 	authClient := &fakeApplicantAuthClient{
 		verifyErr: &biz.AuthError{Code: biz.AuthCodeExpired, Message: "验证码已过期"},
@@ -653,7 +692,7 @@ func TestHTTPServer_AuthVerifyOtp_mapsExpiredError(t *testing.T) {
 		newFakeIdentityProfileService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
-		log.DefaultLogger,
+		slog.Default(),
 	)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/otp:verify", strings.NewReader(`{"challengeId":"challenge-1","code":"123456"}`))
@@ -688,7 +727,7 @@ func TestHTTPServer_AuthSendOtp_mapsCooldownRetryAfter(t *testing.T) {
 		newFakeIdentityProfileService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
-		log.DefaultLogger,
+		slog.Default(),
 	)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/otp:send", strings.NewReader(`{"countryCode":"+852","phone":"91234567"}`))
@@ -730,7 +769,7 @@ func TestHTTPServer_AuthSendOtp_mapsConsulNoHealthyInstance(t *testing.T) {
 		newFakeIdentityProfileService(),
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
-		log.DefaultLogger,
+		slog.Default(),
 	)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/otp:send", strings.NewReader(`{"countryCode":"+852","phone":"91234567"}`))
@@ -798,7 +837,7 @@ func TestHTTPServer_IdentityProfilePut_savesProfileAndAdvancesStep(t *testing.T)
 		identityProfile,
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
-		log.DefaultLogger,
+		slog.Default(),
 	)
 
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/me/identity-profile", strings.NewReader(`{"applicationId":"app_001","profile":{"hkidBody":"A123456","hkidCheckDigit":"3","firstName":"Ada","lastName":"Lovelace","chineseName":"Test Name","nationality":2,"dateOfBirth":"1990-01-15"}}`))
@@ -847,7 +886,7 @@ func TestHTTPServer_IdentityProfileGet_whenEmpty_shouldReturnEmptyResponse(t *te
 		identityProfile,
 		fakeTokenValidator{applicantID: "applicant_001"},
 		bffkit.NewMemoryIdempotencyStore(0),
-		log.DefaultLogger,
+		slog.Default(),
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/identity-profile?applicationId=app_001", nil)
@@ -942,7 +981,7 @@ func newTestHTTPServerWithPricing(quoteClient biz.QuoteClient, tokenValidator bf
 		newFakeIdentityProfileService(),
 		tokenValidator,
 		bffkit.NewMemoryIdempotencyStore(0),
-		log.DefaultLogger,
+		slog.Default(),
 	)
 }
 
@@ -960,7 +999,7 @@ func newTestHTTPServerWithOrigination(originationClient biz.OriginationClient, t
 		newFakeIdentityProfileService(),
 		tokenValidator,
 		bffkit.NewMemoryIdempotencyStore(0),
-		log.DefaultLogger,
+		slog.Default(),
 	)
 }
 

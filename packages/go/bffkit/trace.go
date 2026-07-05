@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	khttp "github.com/go-kratos/kratos/v2/transport/http"
+	khttp "github.com/go-kratos/kratos/v3/transport/http"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -36,7 +36,7 @@ const (
 )
 
 type AccessLogger interface {
-	Infow(keyvals ...any)
+	Info(msg string, args ...any)
 }
 
 var (
@@ -115,7 +115,7 @@ func TraceFilter(logger AccessLogger) khttp.FilterFunc {
 				if recorder.errorCode != "" {
 					keyvals = append(keyvals, "error_code", recorder.errorCode)
 				}
-				logger.Infow(keyvals...)
+				logger.Info("http request", keyvals...)
 			}
 		})
 	}

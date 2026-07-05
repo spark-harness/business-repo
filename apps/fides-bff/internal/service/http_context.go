@@ -4,7 +4,7 @@ import (
 	"context"
 	nethttp "net/http"
 
-	khttp "github.com/go-kratos/kratos/v2/transport/http"
+	khttp "github.com/go-kratos/kratos/v3/transport/http"
 )
 
 func requestHeaders(ctx context.Context) nethttp.Header {

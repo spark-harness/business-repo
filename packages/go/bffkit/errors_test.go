@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	kerrors "github.com/go-kratos/kratos/v2/errors"
+	kerrors "github.com/go-kratos/kratos/v3/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

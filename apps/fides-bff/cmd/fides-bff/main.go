@@ -8,12 +8,13 @@ package main
 import (
 	"context"
 	"flag"
+	"log/slog"
 	"os"
 	"time"
 
-	"github.com/go-kratos/kratos/v2"
-	"github.com/go-kratos/kratos/v2/log"
-	"github.com/go-kratos/kratos/v2/transport/http"
+	"github.com/go-kratos/kratos/v3"
+	"github.com/go-kratos/kratos/v3/log"
+	"github.com/go-kratos/kratos/v3/transport/http"
 
 	"github.com/spark/fides-bff/internal/biz"
 	"github.com/spark/fides-bff/internal/observability"
@@ -32,7 +33,7 @@ func init() {
 	flag.StringVar(&flagconf, "conf", "configs/config.yaml", "config path, eg: -conf config.yaml")
 }
 
-func newApp(logger log.Logger, hs *http.Server, registration *registration) *kratos.App {
+func newApp(logger *slog.Logger, hs *http.Server, registration *registration) *kratos.App {
 	name := Name
 	if registration != nil && registration.name != "" {
 		name = registration.name
@@ -56,7 +57,9 @@ func newApp(logger log.Logger, hs *http.Server, registration *registration) *kra
 func main() {
 	flag.Parse()
 
-	logger := log.With(log.NewStdLogger(os.Stdout),
+	logger := log.NewLogger(
+		log.NewHandler(log.WithWriter(os.Stdout), log.WithFormat(log.FormatJSON)),
+	).With(
 		"service.name", Name,
 		"service.version", Version,
 	)

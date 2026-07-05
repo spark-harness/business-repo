@@ -16,7 +16,7 @@ type testLogger struct {
 	keyvals []any
 }
 
-func (l *testLogger) Infow(keyvals ...any) {
+func (l *testLogger) Info(_ string, keyvals ...any) {
 	l.keyvals = append(l.keyvals, keyvals...)
 }
 

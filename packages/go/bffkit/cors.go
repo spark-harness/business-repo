@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	khttp "github.com/go-kratos/kratos/v2/transport/http"
+	khttp "github.com/go-kratos/kratos/v3/transport/http"
 )
 
 type CORSConfig struct {
