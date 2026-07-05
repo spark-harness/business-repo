@@ -55,14 +55,14 @@ APPLICANT_GRPC_TIMEOUT=10s
 REGISTRY_CONSUL_SERVICE_NAME=env-file-fides-bff
 QUOTE_GRPC_TIMEOUT=5s
 QUOTE_GRPC_PLAINTEXT=true
-ORIGINATION_HTTP_BASE_URL=http://origination-api.local:8080
-ORIGINATION_HTTP_TIMEOUT=6s
+ORIGINATION_GRPC_TIMEOUT=6s
+ORIGINATION_GRPC_PLAINTEXT=true
 `)
 	t.Setenv("SERVER_HTTP_ADDR", "127.0.0.1:7000")
 	t.Setenv("REGISTRY_CONSUL_SERVICE_NAME", "shell-fides-bff")
 	cleanupEnv(t, "APPLICANT_GRPC_TIMEOUT")
 	cleanupEnv(t, "QUOTE_GRPC_TIMEOUT", "QUOTE_GRPC_PLAINTEXT")
-	cleanupEnv(t, "ORIGINATION_HTTP_BASE_URL", "ORIGINATION_HTTP_TIMEOUT")
+	cleanupEnv(t, "ORIGINATION_GRPC_TIMEOUT", "ORIGINATION_GRPC_PLAINTEXT")
 
 	got, err := loadBootstrap(loadConfigOptions{ConfigPath: configPath, EnvFilePath: envPath})
 	if err != nil {
@@ -80,8 +80,8 @@ ORIGINATION_HTTP_TIMEOUT=6s
 	if got.Quote.GRPC.Timeout != "5s" || !got.Quote.GRPC.Plaintext {
 		t.Fatalf("Quote.GRPC = %#v", got.Quote.GRPC)
 	}
-	if got.Origination.HTTP.BaseURL != "http://origination-api.local:8080" || got.Origination.HTTP.Timeout != "6s" {
-		t.Fatalf("Origination.HTTP = %#v", got.Origination.HTTP)
+	if got.Origination.GRPC.Timeout != "6s" || !got.Origination.GRPC.Plaintext {
+		t.Fatalf("Origination.GRPC = %#v", got.Origination.GRPC)
 	}
 }
 
@@ -184,9 +184,9 @@ origination:
     address: "${ORIGINATION_CONSUL_ADDRESS:127.0.0.1:8500}"
     scheme: "${ORIGINATION_CONSUL_SCHEME:http}"
     service_name: "${ORIGINATION_CONSUL_SERVICE_NAME:origination-api}"
-  http:
-    base_url: "${ORIGINATION_HTTP_BASE_URL:}"
-    timeout: "${ORIGINATION_HTTP_TIMEOUT:3s}"
+  grpc:
+    timeout: "${ORIGINATION_GRPC_TIMEOUT:3s}"
+    plaintext: "${ORIGINATION_GRPC_PLAINTEXT:true}"
 registry:
   consul:
     enabled: "${REGISTRY_CONSUL_ENABLED:false}"

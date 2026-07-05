@@ -29,9 +29,9 @@ origination:
     address: "${ORIGINATION_CONSUL_ADDRESS:127.0.0.1:8500}"
     scheme: "${ORIGINATION_CONSUL_SCHEME:http}"
     service_name: "${ORIGINATION_CONSUL_SERVICE_NAME:origination-api}"
-  http:
-    base_url: "${ORIGINATION_HTTP_BASE_URL:}"
-    timeout: "${ORIGINATION_HTTP_TIMEOUT:3s}"
+  grpc:
+    timeout: "${ORIGINATION_GRPC_TIMEOUT:3s}"
+    plaintext: "${ORIGINATION_GRPC_PLAINTEXT:true}"
 auth:
   token_mode: "${AUTH_TOKEN_MODE:hmac}"
   token_secret: "${AUTH_TOKEN_SECRET:}"
