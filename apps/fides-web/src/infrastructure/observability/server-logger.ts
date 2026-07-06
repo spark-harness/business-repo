@@ -3,13 +3,17 @@ import { randomUUID } from "node:crypto";
 import { isSpanContextValid, trace } from "@opentelemetry/api";
 
 import { getRuntimeEnvironmentFromEnv } from "@/config/env";
-import { emitServerOtelLog } from "./server-otel-logs";
+import { emitServerOtelLog, type ServerOtelLogContext } from "./server-otel-logs";
 
 type ServerLogLevel = "INFO" | "WARN" | "ERROR";
 
 export type ServerLogField = string | number | boolean | undefined;
 
-type ServerLogFields = Record<string, ServerLogField>;
+const OTEL_LOG_CONTEXT = Symbol("fides.serverLogContext");
+
+type ServerLogFields = Record<string, ServerLogField> & {
+  [OTEL_LOG_CONTEXT]?: ServerOtelLogContext;
+};
 
 type ServerLoggerOptions = {
   sink?: (line: string) => void;
@@ -19,6 +23,7 @@ type RequestLogContext = {
   trace_id?: string;
   span_id?: string;
   request_id: string;
+  [OTEL_LOG_CONTEXT]?: ServerOtelLogContext;
 };
 
 const SERVICE_NAME = "fides-web";
@@ -104,7 +109,7 @@ function writeLog(
   };
 
   sink(JSON.stringify(record));
-  emitServerOtelLog(record, sink);
+  emitServerOtelLog(record, fields[OTEL_LOG_CONTEXT], sink);
 }
 
 function sanitizeFields(fields: ServerLogFields): ServerLogFields {
@@ -133,7 +138,7 @@ function readSafeRequestId(value: string | null): string | undefined {
   return requestId;
 }
 
-function parseTraceparent(value: string | null): Pick<RequestLogContext, "trace_id"> {
+function parseTraceparent(value: string | null): Pick<RequestLogContext, "trace_id" | typeof OTEL_LOG_CONTEXT> {
   const match = value?.match(TRACEPARENT_PATTERN);
   if (!match) {
     return {};
@@ -144,5 +149,8 @@ function parseTraceparent(value: string | null): Pick<RequestLogContext, "trace_
   }
   return {
     trace_id: traceId.toLowerCase(),
+    [OTEL_LOG_CONTEXT]: {
+      span_id: spanId.toLowerCase(),
+    },
   };
 }

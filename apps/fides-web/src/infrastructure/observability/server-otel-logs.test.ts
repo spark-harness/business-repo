@@ -81,6 +81,42 @@ describe("server OTEL logs", () => {
     });
   });
 
+  it("uses internal OTEL context for traceparent fallback logs without a stdout span_id", async () => {
+    vi.stubEnv("FIDES_RUNTIME_ENV", "dev-1");
+    vi.stubEnv("FIDES_BFF_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("OTEL_LOGS_EXPORTER", "otlp");
+    vi.stubEnv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "https://otel.example/v1/logs");
+    vi.stubEnv("OTEL_SERVICE_NAME", "fides-web");
+    const exporter = new CapturingLogRecordExporter();
+    const otelLogs = createServerOtelLogExporter({ exporter });
+    const record: ServerOtelLogRecord = {
+      timestamp: "2026-07-06T00:00:00.000Z",
+      level: "INFO",
+      service: "fides-web",
+      operation: "runtime_config.request",
+      deployment_environment: "dev-1",
+      trace_id: "4bf92f3577b34da6a3ce929d0e0e4736",
+      request_id: "req_123",
+      route: "/api/runtime-config",
+      status: 200,
+    };
+
+    otelLogs?.emit(record, { span_id: "00f067aa0ba902b7" });
+    await otelLogs?.forceFlush();
+
+    expect(exporter.records).toHaveLength(1);
+    expect(exporter.records[0]).toMatchObject({
+      spanContext: {
+        traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+        spanId: "00f067aa0ba902b7",
+      },
+      attributes: {
+        trace_id: "4bf92f3577b34da6a3ce929d0e0e4736",
+      },
+    });
+    expect(exporter.records[0]?.attributes).not.toHaveProperty("span_id");
+  });
+
   it("writes a single safe diagnostic when exporter initialization fails", async () => {
     vi.stubEnv("FIDES_RUNTIME_ENV", "dev-1");
     vi.stubEnv("FIDES_BFF_BASE_URL", "http://127.0.0.1:8000/api/v1");
@@ -99,8 +135,8 @@ describe("server OTEL logs", () => {
     };
 
     const { emitServerOtelLog } = await import("./server-otel-logs");
-    emitServerOtelLog(record, sink);
-    emitServerOtelLog(record, sink);
+    emitServerOtelLog(record, undefined, sink);
+    emitServerOtelLog(record, undefined, sink);
 
     expect(sink).toHaveBeenCalledTimes(1);
     const diagnostic = JSON.parse(sink.mock.calls[0]?.[0] as string) as Record<string, unknown>;
