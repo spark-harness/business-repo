@@ -37,6 +37,10 @@ pnpm dev
 | `FIDES_BFF_BASE_URL` | 服务端代理访问 `fides-bff` 的内部 base URL |
 | `FIDES_BROWSER_TRACING_ENDPOINT` | Browser OTLP traces endpoint，留空关闭导出 |
 | `FIDES_BROWSER_TRACING_HEADERS` | Browser OTLP traces public headers，格式为 `k=v,k2=v2` |
+| `OTEL_LOGS_EXPORTER` | 服务端 OTEL Logs exporter，`otlp` 开启，`none` 关闭 |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | 服务端 OTLP logs endpoint，仅服务端读取 |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | 服务端 OTLP logs headers，格式为 `k=v,k2=v2`，不得进入 public runtime config |
+| `OTEL_SERVICE_NAME` | 服务端 OTEL logs service name，默认 `fides-web` |
 
 旧 `NEXT_PUBLIC_FIDES_*` 和 `NEXT_PUBLIC_OTEL_*` 变量会被配置校验拒绝。
 
@@ -58,6 +62,8 @@ FIDES_BROWSER_TRACING_HEADERS='<otlp-traces-public-headers>'
 ```
 
 以上仍是标准 OTLP exporter 配置，没有引入 Sentry SDK。
+
+服务端 runtime、route handler 和 BFF proxy 日志始终以单行 JSON 写 stdout；当 `OTEL_LOGS_EXPORTER=otlp` 且配置了 `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` 时，同一条安全字段日志会由服务端 OTLP logs exporter 发送到后端。`OTEL_EXPORTER_OTLP_LOGS_HEADERS` 只在服务端读取，不进入 `/api/runtime-config`。
 
 ## 架构约束
 
