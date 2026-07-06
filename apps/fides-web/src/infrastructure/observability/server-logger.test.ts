@@ -42,7 +42,7 @@ describe("server logger", () => {
       request_id: "req_123",
     });
     expect(record.timestamp).toEqual(expect.any(String));
-    expect(emitServerOtelLog).toHaveBeenCalledWith(expect.objectContaining(record), sink);
+    expect(emitServerOtelLog).toHaveBeenCalledWith(expect.objectContaining(record), undefined, sink);
   });
 
   it("extracts trace context from W3C traceparent", () => {
@@ -56,7 +56,35 @@ describe("server logger", () => {
       trace_id: "4bf92f3577b34da6a3ce929d0e0e4736",
     });
     expect(context).not.toHaveProperty("span_id");
+    expect(JSON.stringify(context)).not.toContain("00f067aa0ba902b7");
     expect(context.request_id).toEqual(expect.any(String));
+  });
+
+  it("passes traceparent span context to OTEL logs without writing span_id to stdout", () => {
+    const sink = vi.fn();
+    const logger = createServerLogger({ sink });
+    const context = createRequestLogContext(
+      new Headers({
+        traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      }),
+    );
+
+    logger.info("runtime_config.request", context);
+
+    const record = JSON.parse(sink.mock.calls[0]?.[0] as string) as Record<string, unknown>;
+    expect(record).toMatchObject({
+      trace_id: "4bf92f3577b34da6a3ce929d0e0e4736",
+    });
+    expect(record).not.toHaveProperty("span_id");
+    expect(emitServerOtelLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trace_id: "4bf92f3577b34da6a3ce929d0e0e4736",
+      }),
+      {
+        span_id: "00f067aa0ba902b7",
+      },
+      sink,
+    );
   });
 
   it("uses an existing request id when trace context is absent", () => {

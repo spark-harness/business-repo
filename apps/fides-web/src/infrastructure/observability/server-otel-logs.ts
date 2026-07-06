@@ -20,8 +20,12 @@ export type ServerOtelLogRecord = {
   [key: string]: string | number | boolean | undefined;
 };
 
+export type ServerOtelLogContext = {
+  span_id?: string;
+};
+
 type ServerOtelLogExporter = {
-  emit(record: ServerOtelLogRecord): void;
+  emit(record: ServerOtelLogRecord, otelContext?: ServerOtelLogContext): void;
   forceFlush(): Promise<void>;
 };
 
@@ -40,10 +44,11 @@ let exporterErrorLogged = false;
 
 export function emitServerOtelLog(
   record: ServerOtelLogRecord,
+  otelContext?: ServerOtelLogContext,
   diagnosticSink?: (line: string) => void,
 ) {
   try {
-    getServerOtelLogExporter(diagnosticSink)?.emit(record);
+    getServerOtelLogExporter(diagnosticSink)?.emit(record, otelContext);
   } catch (error) {
     writeExporterDiagnostic(diagnosticSink, record, error);
   }
@@ -90,8 +95,8 @@ export function createServerOtelLogExporter(
   const logger = provider.getLogger(OTEL_LOGGER_NAME);
 
   return {
-    emit(record) {
-      const activeContext = buildLogContext(record);
+    emit(record, otelContext) {
+      const activeContext = buildLogContext(record, otelContext);
       logger.emit({
         context: activeContext,
         timestamp: new Date(record.timestamp),
@@ -140,13 +145,14 @@ function readErrorType(error: unknown): string {
   return error instanceof Error && error.name ? error.name : "OtelLogsExporterError";
 }
 
-function buildLogContext(record: ServerOtelLogRecord) {
-  if (!record.trace_id || !record.span_id) {
+function buildLogContext(record: ServerOtelLogRecord, otelContext?: ServerOtelLogContext) {
+  const spanId = record.span_id ?? otelContext?.span_id;
+  if (!record.trace_id || !spanId) {
     return ROOT_CONTEXT;
   }
   const spanContext = {
     traceId: record.trace_id,
-    spanId: record.span_id,
+    spanId,
     traceFlags: TraceFlags.SAMPLED,
   };
   if (!isSpanContextValid(spanContext)) {
