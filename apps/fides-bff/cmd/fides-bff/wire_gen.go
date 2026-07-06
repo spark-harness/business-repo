@@ -26,7 +26,7 @@ import (
 // (biz/service/server) stay free of the wire DI framework, per the team
 // backend clean-architecture rule that domain/application must not depend on
 // DI frameworks.
-func wireApp(confServer *conf.Server, applicant *conf.Applicant, quote *conf.Quote, origination *conf.Origination, auth *conf.Auth, registry *conf.Registry, version biz.Version, logger *slog.Logger) (*kratos.App, func(), error) {
+func wireApp(confServer *conf.Server, applicant *conf.Applicant, quote *conf.Quote, origination *conf.Origination, auth *conf.Auth, registry *conf.Registry, observability conf.Observability, version biz.Version, logger *slog.Logger) (*kratos.App, func(), error) {
 	healthUsecase := biz.NewHealthUsecase(version)
 	healthService := service.NewHealthService(healthUsecase)
 	applicantAuthClient := data.NewApplicantAuthClient(applicant)
@@ -42,7 +42,7 @@ func wireApp(confServer *conf.Server, applicant *conf.Applicant, quote *conf.Quo
 	identityProfileService := service.NewIdentityProfileService(identityProfileUsecase)
 	sessionTokenValidator := data.NewSessionTokenValidator(auth)
 	idempotencyStore := newIdempotencyStore()
-	httpServer := server.NewHTTPServer(confServer, healthService, authService, pricingService, originationService, identityProfileService, sessionTokenValidator, idempotencyStore, logger)
+	httpServer := server.NewHTTPServerWithObservability(confServer, healthService, authService, pricingService, originationService, identityProfileService, observability, sessionTokenValidator, idempotencyStore, logger)
 	mainRegistration, err := newConsulRegistration(registry)
 	if err != nil {
 		return nil, nil, err

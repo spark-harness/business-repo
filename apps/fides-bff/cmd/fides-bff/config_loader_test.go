@@ -91,8 +91,13 @@ func TestLoadBootstrap_KratosFileEnvPlaceholders(t *testing.T) {
 	t.Setenv("SERVER_CORS_ALLOWED_ORIGIN_0", "http://localhost:5173")
 	t.Setenv("REGISTRY_CONSUL_SERVICE_NAME", "dev-1-fides-bff")
 	t.Setenv("REGISTRY_CONSUL_HEALTH_CHECK_INTERVAL_SEC", "25")
-	t.Setenv("OBSERVABILITY_OTEL_ENABLED", "true")
-	t.Setenv("OBSERVABILITY_OTEL_ENDPOINT", "http://otel.local/v1/traces")
+	t.Setenv("OTEL_TRACES_EXPORTER", "otlp")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://otel.local/v1/traces")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "http/protobuf")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "x-sentry-auth=token")
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment=dev-1")
+	t.Setenv("OTEL_SERVICE_NAME", "fides-bff")
+	t.Setenv("OTEL_SERVICE_VERSION", "runtime")
 
 	got, err := loadBootstrap(loadConfigOptions{ConfigPath: configPath, EnvFilePath: filepath.Join(t.TempDir(), ".env")})
 	if err != nil {
@@ -110,7 +115,13 @@ func TestLoadBootstrap_KratosFileEnvPlaceholders(t *testing.T) {
 	if got.Registry.Consul.HealthCheckIntervalSec != 25 {
 		t.Fatalf("Registry.Consul.HealthCheckIntervalSec = %d", got.Registry.Consul.HealthCheckIntervalSec)
 	}
-	if !got.Observability.OTel.Enabled || got.Observability.OTel.Endpoint != "http://otel.local/v1/traces" {
+	if got.Observability.OTel.TracesExporter != "otlp" ||
+		got.Observability.OTel.TracesEndpoint != "http://otel.local/v1/traces" ||
+		got.Observability.OTel.TracesProtocol != "http/protobuf" ||
+		got.Observability.OTel.TracesHeaders != "x-sentry-auth=token" ||
+		got.Observability.OTel.ResourceAttributes != "deployment.environment=dev-1" ||
+		got.Observability.OTel.ServiceName != "fides-bff" ||
+		got.Observability.OTel.ServiceVersion != "runtime" {
 		t.Fatalf("Observability.OTel = %#v", got.Observability.OTel)
 	}
 }
@@ -205,14 +216,14 @@ registry:
       module: "${REGISTRY_CONSUL_METADATA_MODULE:frontend}"
 observability:
   otel:
-    enabled: "${OBSERVABILITY_OTEL_ENABLED:false}"
-    exporter: "${OBSERVABILITY_OTEL_EXPORTER:otlp}"
-    endpoint: "${OBSERVABILITY_OTEL_ENDPOINT:}"
-    protocol: "${OBSERVABILITY_OTEL_PROTOCOL:http/protobuf}"
-    headers:
-      x-sentry-auth: "${OBSERVABILITY_OTEL_X_SENTRY_AUTH:}"
-    environment: "${OBSERVABILITY_OTEL_ENVIRONMENT:local}"
-    release: "${OBSERVABILITY_OTEL_RELEASE:dev}"
+    sdk_disabled: "${OTEL_SDK_DISABLED:false}"
+    traces_exporter: "${OTEL_TRACES_EXPORTER:none}"
+    traces_endpoint: "${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:}"
+    traces_protocol: "${OTEL_EXPORTER_OTLP_TRACES_PROTOCOL:http/protobuf}"
+    traces_headers: "${OTEL_EXPORTER_OTLP_TRACES_HEADERS:}"
+    resource_attributes: "${OTEL_RESOURCE_ATTRIBUTES:deployment.environment=local}"
+    service_name: "${OTEL_SERVICE_NAME:fides-bff}"
+    service_version: "${OTEL_SERVICE_VERSION:dev}"
 `
 }
 

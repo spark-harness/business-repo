@@ -30,12 +30,28 @@ func NewHTTPServer(
 	store bffkit.IdempotencyStore,
 	logger *slog.Logger,
 ) *khttp.Server {
+	return NewHTTPServerWithObservability(c, health, auth, pricing, origination, identityProfile, conf.Observability{}, tokenValidator, store, logger)
+}
+
+// NewHTTPServerWithObservability builds the REST transport with bootstrap-level observability config.
+func NewHTTPServerWithObservability(
+	c *conf.Server,
+	health *service.HealthService,
+	auth *service.AuthService,
+	pricing *service.PricingService,
+	origination *service.OriginationService,
+	identityProfile *service.IdentityProfileService,
+	observability conf.Observability,
+	tokenValidator bffkit.TokenValidator,
+	store bffkit.IdempotencyStore,
+	logger *slog.Logger,
+) *khttp.Server {
 	opts := []khttp.ServerOption{
 		khttp.RequestDecoder(compatRequestDecoder),
 		khttp.ErrorEncoder(bffkit.ErrorEncoder),
 		khttp.ResponseEncoder(compatResponseEncoder),
 		khttp.Filter(
-			bffkit.TraceFilter(logger),
+			bffkit.TraceFilter(logger, bffkit.WithDeploymentEnvironment(resourceAttribute(observability.OTel.ResourceAttributes, "deployment.environment"))),
 			bffkit.CORSFilter(bffkit.CORSConfig{
 				AllowedOrigins: c.CORS.AllowedOrigins,
 				AllowedMethods: []string{
@@ -67,6 +83,19 @@ func NewHTTPServer(
 	fidesbffv1pb.RegisterFidesBffLoanApplicationServiceHTTPServer(srv, origination)
 	fidesbffv1pb.RegisterFidesBffIdentityProfileServiceHTTPServer(srv, identityProfile)
 	return srv
+}
+
+func resourceAttribute(raw string, key string) string {
+	for _, entry := range strings.Split(raw, ",") {
+		name, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(name) == key {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func compatRequestDecoder(r *nethttp.Request, v any) error {

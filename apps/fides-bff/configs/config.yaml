@@ -54,11 +54,11 @@ registry:
       module: "${REGISTRY_CONSUL_METADATA_MODULE:frontend}"
 observability:
   otel:
-    enabled: "${OBSERVABILITY_OTEL_ENABLED:false}"
-    exporter: "${OBSERVABILITY_OTEL_EXPORTER:otlp}"
-    endpoint: "${OBSERVABILITY_OTEL_ENDPOINT:}"
-    protocol: "${OBSERVABILITY_OTEL_PROTOCOL:http/protobuf}"
-    headers:
-      x-sentry-auth: "${OBSERVABILITY_OTEL_X_SENTRY_AUTH:}"
-    environment: "${OBSERVABILITY_OTEL_ENVIRONMENT:local}"
-    release: "${OBSERVABILITY_OTEL_RELEASE:dev}"
+    sdk_disabled: "${OTEL_SDK_DISABLED:false}"
+    traces_exporter: "${OTEL_TRACES_EXPORTER:none}"
+    traces_endpoint: "${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:}"
+    traces_protocol: "${OTEL_EXPORTER_OTLP_TRACES_PROTOCOL:http/protobuf}"
+    traces_headers: "${OTEL_EXPORTER_OTLP_TRACES_HEADERS:}"
+    resource_attributes: "${OTEL_RESOURCE_ATTRIBUTES:deployment.environment=local}"
+    service_name: "${OTEL_SERVICE_NAME:fides-bff}"
+    service_version: "${OTEL_SERVICE_VERSION:dev}"

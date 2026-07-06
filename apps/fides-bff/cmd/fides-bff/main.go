@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"flag"
+	"io"
 	"log/slog"
 	"os"
 	"time"
@@ -31,6 +32,25 @@ var flagconf string
 
 func init() {
 	flag.StringVar(&flagconf, "conf", "configs/config.yaml", "config path, eg: -conf config.yaml")
+}
+
+func newLogger(writer io.Writer) *slog.Logger {
+	return log.NewLogger(
+		log.NewHandler(log.WithWriter(writer), log.WithFormat(log.FormatJSON), log.WithReplaceAttr(replaceLogAttr)),
+	).With(
+		"service.name", Name,
+		"service.version", Version,
+	)
+}
+
+func replaceLogAttr(_ []string, attr slog.Attr) slog.Attr {
+	switch attr.Key {
+	case slog.TimeKey:
+		attr.Key = "timestamp"
+	case slog.MessageKey:
+		attr.Key = "message"
+	}
+	return attr
 }
 
 func newApp(logger *slog.Logger, hs *http.Server, registration *registration) *kratos.App {
@@ -57,12 +77,7 @@ func newApp(logger *slog.Logger, hs *http.Server, registration *registration) *k
 func main() {
 	flag.Parse()
 
-	logger := log.NewLogger(
-		log.NewHandler(log.WithWriter(os.Stdout), log.WithFormat(log.FormatJSON)),
-	).With(
-		"service.name", Name,
-		"service.version", Version,
-	)
+	logger := newLogger(os.Stdout)
 
 	bc, err := loadBootstrap(loadConfigOptions{ConfigPath: flagconf})
 	if err != nil {
@@ -75,7 +90,7 @@ func main() {
 	}
 	defer func() { _ = otelShutdown(context.Background()) }()
 
-	app, cleanup, err := wireApp(&bc.Server, &bc.Applicant, &bc.Quote, &bc.Origination, &bc.Auth, &bc.Registry, biz.Version(Version), logger)
+	app, cleanup, err := wireApp(&bc.Server, &bc.Applicant, &bc.Quote, &bc.Origination, &bc.Auth, &bc.Registry, bc.Observability, biz.Version(Version), logger)
 	if err != nil {
 		panic(err)
 	}

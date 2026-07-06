@@ -39,6 +39,18 @@ type AccessLogger interface {
 	Info(msg string, args ...any)
 }
 
+type TraceFilterOption func(*traceFilterConfig)
+
+type traceFilterConfig struct {
+	deploymentEnvironment string
+}
+
+func WithDeploymentEnvironment(environment string) TraceFilterOption {
+	return func(c *traceFilterConfig) {
+		c.deploymentEnvironment = strings.TrimSpace(environment)
+	}
+}
+
 var (
 	tracer              = otel.Tracer("github.com/spark/bffkit")
 	meter               = otel.Meter("github.com/spark/bffkit")
@@ -51,7 +63,11 @@ func init() {
 	httpServerDurations, _ = meter.Float64Histogram("http.server.duration")
 }
 
-func TraceFilter(logger AccessLogger) khttp.FilterFunc {
+func TraceFilter(logger AccessLogger, opts ...TraceFilterOption) khttp.FilterFunc {
+	config := traceFilterConfig{}
+	for _, opt := range opts {
+		opt(&config)
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -67,8 +83,8 @@ func TraceFilter(logger AccessLogger) khttp.FilterFunc {
 			)
 			defer span.End()
 
-			traceID := firstNonEmpty(r.Header.Get(HeaderTraceID), spanTraceID(span), newTraceID())
-			correlationID := firstNonEmpty(r.Header.Get(HeaderCorrelationID), traceID)
+			traceID := firstNonEmpty(safeExternalCorrelationID(r.Header.Get(HeaderTraceID)), spanTraceID(span), newTraceID())
+			correlationID := firstNonEmpty(safeExternalCorrelationID(r.Header.Get(HeaderCorrelationID)), traceID)
 			span.SetAttributes(
 				attribute.String("trace_id", traceID),
 				attribute.String("request_id", correlationID),
@@ -112,6 +128,12 @@ func TraceFilter(logger AccessLogger) khttp.FilterFunc {
 					"latency_ms", time.Since(start).Milliseconds(),
 				}
 				keyvals[1] = operation
+				if spanID := spanID(span); spanID != "" {
+					keyvals = append(keyvals, "span_id", spanID)
+				}
+				if environment := config.deploymentEnvironment; environment != "" {
+					keyvals = append(keyvals, "deployment.environment", environment)
+				}
 				if recorder.errorCode != "" {
 					keyvals = append(keyvals, "error_code", recorder.errorCode)
 				}
@@ -212,6 +234,14 @@ func spanTraceID(span oteltrace.Span) string {
 	return spanContext.TraceID().String()
 }
 
+func spanID(span oteltrace.Span) string {
+	spanContext := span.SpanContext()
+	if !spanContext.IsValid() {
+		return ""
+	}
+	return spanContext.SpanID().String()
+}
+
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if value != "" {
@@ -230,6 +260,21 @@ func newTraceID() string {
 }
 
 var pathVariablePattern = regexp.MustCompile(`(?i)^[0-9a-f]{8,}$|^[0-9]+$|^[0-9a-f-]{16,}$`)
+var externalCorrelationIDPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9._-]{7,63}$`)
+
+func safeExternalCorrelationID(value string) string {
+	value = strings.TrimSpace(value)
+	if !externalCorrelationIDPattern.MatchString(value) {
+		return ""
+	}
+	lower := strings.ToLower(value)
+	for _, marker := range []string{"authorization", "bearer", "cookie", "password", "phone", "secret", "token", "otp"} {
+		if strings.Contains(lower, marker) {
+			return ""
+		}
+	}
+	return value
+}
 
 func routePattern(path string) string {
 	if path == "" || path == "/" {
