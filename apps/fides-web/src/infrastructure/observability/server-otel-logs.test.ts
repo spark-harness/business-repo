@@ -79,6 +79,10 @@ describe("server OTEL logs", () => {
         "deployment.environment": "dev-1",
       },
     });
+    expect(exporter.records[0]?.resource.attributes).toMatchObject({
+      "service.name": "fides-web",
+      "deployment.environment": "dev-1",
+    });
   });
 
   it("uses internal OTEL context for traceparent fallback logs without a stdout span_id", async () => {
