@@ -66,21 +66,21 @@ ORIGINATION_GRPC_TARGET=127.0.0.1:19091 \
 make run
 ```
 
-OpenTelemetry 通过官方 SDK 和 OTLP exporter 初始化。默认 `observability.otel.enabled=false`；启用时设置通用 OTLP endpoint、protocol 和 headers，可指向 OpenTelemetry Collector，也可按 Sentry Direct OTLP 的项目 endpoint 直连。应用代码不依赖 Sentry SDK、Sentry exporter 或供应商专用 span processor。
+OpenTelemetry 通过官方 SDK 和 OTLP exporter 初始化。默认 `observability.otel.traces_exporter=none`；启用时使用标准 `OTEL_*` 环境变量设置 traces exporter、endpoint、protocol 和 headers，可指向 OpenTelemetry Collector，也可按 Sentry Direct OTLP 的项目 endpoint 直连。应用代码不依赖 Sentry SDK、Sentry exporter 或供应商专用 span processor。
 
 本地验证 Sentry Direct OTLP 时，按 DSN 拆出 host、project id、public key 后配置：
 
 ```yaml
 observability:
   otel:
-    enabled: true
-    exporter: otlp
-    endpoint: "<otlp-traces-endpoint>"
-    protocol: http/protobuf
-    headers:
-      x-sentry-auth: "<otlp-auth-header>"
-    environment: local
-    release: dev
+    sdk_disabled: false
+    traces_exporter: otlp
+    traces_endpoint: "<otlp-traces-endpoint>"
+    traces_protocol: http/protobuf
+    traces_headers: "x-sentry-auth=<otlp-auth-header>"
+    resource_attributes: "deployment.environment=local"
+    service_name: fides-bff
+    service_version: dev
 ```
 
 这只是 OTLP HTTP exporter 的 header 配置；切换到 Collector 或其他 OTLP 后端时只需要替换 endpoint / headers。
@@ -136,14 +136,14 @@ registry:
       module: "${REGISTRY_CONSUL_METADATA_MODULE:frontend}"
 observability:
   otel:
-    enabled: "${OBSERVABILITY_OTEL_ENABLED:false}"
-    exporter: "${OBSERVABILITY_OTEL_EXPORTER:otlp}"
-    endpoint: "${OBSERVABILITY_OTEL_ENDPOINT:}"
-    protocol: "${OBSERVABILITY_OTEL_PROTOCOL:http/protobuf}"
-    headers:
-      x-sentry-auth: "${OBSERVABILITY_OTEL_X_SENTRY_AUTH:}"
-    environment: "${OBSERVABILITY_OTEL_ENVIRONMENT:local}"
-    release: "${OBSERVABILITY_OTEL_RELEASE:dev}"
+    sdk_disabled: "${OTEL_SDK_DISABLED:false}"
+    traces_exporter: "${OTEL_TRACES_EXPORTER:none}"
+    traces_endpoint: "${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:}"
+    traces_protocol: "${OTEL_EXPORTER_OTLP_TRACES_PROTOCOL:http/protobuf}"
+    traces_headers: "${OTEL_EXPORTER_OTLP_TRACES_HEADERS:}"
+    resource_attributes: "${OTEL_RESOURCE_ATTRIBUTES:deployment.environment=local}"
+    service_name: "${OTEL_SERVICE_NAME:fides-bff}"
+    service_version: "${OTEL_SERVICE_VERSION:dev}"
 ```
 
 本地可复制 `.env.example` 为 `.env` 后调整私有值。`.env` 已被 git ignore，不要提交真实 token、密码、Authorization header 或其他 secret。
@@ -155,7 +155,8 @@ SERVER_HTTP_ADDR=127.0.0.1:8000
 APPLICANT_CONSUL_ADDRESS=127.0.0.1:8500
 REGISTRY_CONSUL_SERVICE_NAME=dev-1-fides-bff
 REGISTRY_CONSUL_DISCOVERY_ADDR=127.0.0.1:8000
-OBSERVABILITY_OTEL_ENVIRONMENT=local
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment=local
+OTEL_SERVICE_NAME=fides-bff
 ```
 
 这里删除的只是启动配置的 Consul KV source，不是服务注册/发现配置。`applicant.consul`、`quote.consul`、`origination.consul` 和 `registry.consul` 仍然通过环境占位符生效。

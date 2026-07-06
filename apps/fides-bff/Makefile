@@ -35,7 +35,7 @@ tidy:
 .PHONY: build
 build:
 	mkdir -p $(BIN_DIR)
-	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(APP) $(MAIN)
+	go build -buildvcs=false -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(APP) $(MAIN)
 
 ## run: start the service locally
 .PHONY: run
@@ -55,6 +55,7 @@ vet:
 ## lint: run golangci-lint
 .PHONY: lint
 lint:
+	./scripts/check-logging-guardrails.sh
 	golangci-lint run ./...
 
 ## clean: remove build artifacts

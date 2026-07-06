@@ -87,11 +87,12 @@ type Observability struct {
 }
 
 type OTel struct {
-	Enabled     bool              `json:"enabled"`
-	Exporter    string            `json:"exporter"`
-	Endpoint    string            `json:"endpoint"`
-	Protocol    string            `json:"protocol"`
-	Headers     map[string]string `json:"headers"`
-	Environment string            `json:"environment"`
-	Release     string            `json:"release"`
+	SDKDisabled        bool   `json:"sdk_disabled"`
+	TracesExporter     string `json:"traces_exporter"`
+	TracesEndpoint     string `json:"traces_endpoint"`
+	TracesProtocol     string `json:"traces_protocol"`
+	TracesHeaders      string `json:"traces_headers"`
+	ResourceAttributes string `json:"resource_attributes"`
+	ServiceName        string `json:"service_name"`
+	ServiceVersion     string `json:"service_version"`
 }

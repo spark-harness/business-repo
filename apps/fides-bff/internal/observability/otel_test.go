@@ -22,7 +22,7 @@ func TestSetup_DisabledKeepsNoopProvider(t *testing.T) {
 		otel.SetTextMapPropagator(originalPropagator)
 	})
 	otel.SetTracerProvider(noop.NewTracerProvider())
-	shutdown, err := Setup(context.Background(), conf.OTel{Enabled: false}, "fides-bff", "dev")
+	shutdown, err := Setup(context.Background(), conf.OTel{SDKDisabled: true}, "fides-bff", "dev")
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestSetup_DisabledKeepsOutgoingGRPCTraceContext(t *testing.T) {
 		otel.SetTextMapPropagator(originalPropagator)
 	})
 	otel.SetTextMapPropagator(propagation.Baggage{})
-	if _, err := Setup(context.Background(), conf.OTel{Enabled: false}, "fides-bff", "dev"); err != nil {
+	if _, err := Setup(context.Background(), conf.OTel{TracesExporter: "none"}, "fides-bff", "dev"); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
 	traceID := "4bf92f3577b34da6a3ce929d0e0e4736"
@@ -74,19 +74,21 @@ func TestSetup_DisabledKeepsOutgoingGRPCTraceContext(t *testing.T) {
 	}
 }
 
-func TestSetup_RejectsMissingEndpointWhenEnabled(t *testing.T) {
-	_, err := Setup(context.Background(), conf.OTel{Enabled: true}, "fides-bff", "dev")
-	if err == nil {
-		t.Fatal("expected missing endpoint error")
+func TestSetup_MissingEndpointDisablesExporter(t *testing.T) {
+	shutdown, err := Setup(context.Background(), conf.OTel{TracesExporter: "otlp"}, "fides-bff", "dev")
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if err := shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
 	}
 }
 
 func TestSetup_RejectsUnsupportedProtocol(t *testing.T) {
 	_, err := Setup(context.Background(), conf.OTel{
-		Enabled:  true,
-		Exporter: "otlp",
-		Endpoint: "localhost:4318",
-		Protocol: "zipkin",
+		TracesExporter: "otlp",
+		TracesEndpoint: "localhost:4318",
+		TracesProtocol: "zipkin",
 	}, "fides-bff", "dev")
 	if err == nil {
 		t.Fatal("expected unsupported protocol error")
@@ -95,11 +97,10 @@ func TestSetup_RejectsUnsupportedProtocol(t *testing.T) {
 
 func TestSetup_AcceptsFullOTLPEndpointURL(t *testing.T) {
 	shutdown, err := Setup(context.Background(), conf.OTel{
-		Enabled:  true,
-		Exporter: "otlp",
-		Endpoint: "http://localhost:4318/v1/traces",
-		Protocol: "http/protobuf",
-		Headers:  map[string]string{"x-sentry-auth": "token"},
+		TracesExporter: "otlp",
+		TracesEndpoint: "http://localhost:4318/v1/traces",
+		TracesProtocol: "http/protobuf",
+		TracesHeaders:  "x-sentry-auth=token",
 	}, "fides-bff", "dev")
 	if err != nil {
 		t.Fatalf("setup: %v", err)
@@ -111,31 +112,46 @@ func TestSetup_AcceptsFullOTLPEndpointURL(t *testing.T) {
 
 func TestSetup_RejectsVendorExporter(t *testing.T) {
 	_, err := Setup(context.Background(), conf.OTel{
-		Enabled:  true,
-		Exporter: "sentry",
-		Endpoint: "localhost:4318",
-		Protocol: "http/protobuf",
+		TracesExporter: "sentry",
+		TracesEndpoint: "localhost:4318",
+		TracesProtocol: "http/protobuf",
 	}, "fides-bff", "dev")
 	if err == nil {
 		t.Fatal("expected unsupported exporter error")
 	}
 }
 
-func TestValidateHeaders_RejectsBlankEntries(t *testing.T) {
-	err := validateHeaders(map[string]string{
-		"x-sentry-auth":   "",
-		" authorization ": " bearer token ",
-	})
+func TestParseHeaders_RejectsBlankEntries(t *testing.T) {
+	_, err := parseHeaders("x-sentry-auth=,authorization=bearer token")
 	if err == nil {
 		t.Fatal("expected blank header error")
 	}
 }
 
-func TestNonEmptyHeaders_TrimsEntries(t *testing.T) {
-	got := nonEmptyHeaders(map[string]string{
-		" authorization ": " bearer token ",
-	})
+func TestParseHeaders_TrimsEntries(t *testing.T) {
+	got, err := parseHeaders(" authorization = bearer token ")
+	if err != nil {
+		t.Fatalf("parseHeaders: %v", err)
+	}
 	if len(got) != 1 || got["authorization"] != "bearer token" {
-		t.Fatalf("nonEmptyHeaders() = %#v", got)
+		t.Fatalf("parseHeaders() = %#v", got)
+	}
+}
+
+func TestParseHeaders_DecodesEscapedEntries(t *testing.T) {
+	got, err := parseHeaders("x-sentry-auth=Sentry%20sentry_key%3Dabc%2Csentry_client%3Dfides-bff")
+	if err != nil {
+		t.Fatalf("parseHeaders: %v", err)
+	}
+	want := "Sentry sentry_key=abc,sentry_client=fides-bff"
+	if got["x-sentry-auth"] != want {
+		t.Fatalf("x-sentry-auth = %q, want %q", got["x-sentry-auth"], want)
+	}
+}
+
+func TestDeploymentEnvironment_UsesResourceAttributes(t *testing.T) {
+	got := deploymentEnvironment(conf.OTel{ResourceAttributes: "service.namespace=lendora,deployment.environment=dev-1"})
+	if got != "dev-1" {
+		t.Fatalf("deploymentEnvironment() = %q, want dev-1", got)
 	}
 }
