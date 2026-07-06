@@ -1,9 +1,10 @@
 import { context, isSpanContextValid, ROOT_CONTEXT, trace, TraceFlags } from "@opentelemetry/api";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
+import { resourceFromAttributes } from "@opentelemetry/resources";
 import {
-  BatchLogRecordProcessor,
   LoggerProvider,
   type LogRecordExporter,
+  SimpleLogRecordProcessor,
 } from "@opentelemetry/sdk-logs";
 
 import { getFidesEnv, getRuntimeEnvironmentFromEnv } from "@/config/env";
@@ -83,13 +84,12 @@ export function createServerOtelLogExporter(
       headers: parseHeaders(env.OTEL_EXPORTER_OTLP_LOGS_HEADERS),
     });
   const provider = new LoggerProvider({
+    resource: resourceFromAttributes({
+      "service.name": env.OTEL_SERVICE_NAME,
+      "deployment.environment": getRuntimeEnvironmentFromEnv(),
+    }),
     processors: [
-      new BatchLogRecordProcessor(exporter, {
-        maxQueueSize: 256,
-        maxExportBatchSize: 32,
-        scheduledDelayMillis: 500,
-        exportTimeoutMillis: 5000,
-      }),
+      new SimpleLogRecordProcessor(exporter),
     ],
   });
   const logger = provider.getLogger(OTEL_LOGGER_NAME);
