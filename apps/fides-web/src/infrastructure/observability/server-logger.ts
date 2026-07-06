@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { isSpanContextValid, trace } from "@opentelemetry/api";
 
 import { getRuntimeEnvironmentFromEnv } from "@/config/env";
+import { emitServerOtelLog } from "./server-otel-logs";
 
 type ServerLogLevel = "INFO" | "WARN" | "ERROR";
 
@@ -103,6 +104,7 @@ function writeLog(
   };
 
   sink(JSON.stringify(record));
+  emitServerOtelLog(record, sink);
 }
 
 function sanitizeFields(fields: ServerLogFields): ServerLogFields {

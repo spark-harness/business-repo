@@ -56,6 +56,8 @@ describe("runtime config", () => {
     });
     expect(publicConfig).not.toHaveProperty("environment");
     expect(publicConfig).not.toHaveProperty("internal");
+    expect(publicConfig).not.toHaveProperty("otelLogs");
+    expect(JSON.stringify(publicConfig)).not.toContain("OTEL_EXPORTER_OTLP_LOGS_HEADERS");
   });
 
   it("rejects legacy NEXT_PUBLIC runtime variables", () => {

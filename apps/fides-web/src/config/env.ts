@@ -11,21 +11,45 @@ const optionalTrimmedString = z.preprocess(
 const requiredTrimmedString = z.string().trim().min(1);
 const defaultedTrimmedString = (defaultValue: string) =>
   z.preprocess(blankStringToUndefined, z.string().trim().default(defaultValue));
-const tracingHeadersString = optionalTrimmedString.superRefine((value, context) => {
-  if (!value) {
-    return;
-  }
-  for (const item of value.split(",")) {
-    const index = item.indexOf("=");
-    const key = index >= 0 ? item.slice(0, index).trim() : "";
-    const headerValue = index >= 0 ? item.slice(index + 1).trim() : "";
-    if (!key || !headerValue) {
-      context.addIssue({
-        code: "custom",
-        message: "FIDES_BROWSER_TRACING_HEADERS must use comma-separated key=value pairs",
-      });
+const headersString = (variableName: string) =>
+  optionalTrimmedString.superRefine((value, context) => {
+    if (!value) {
       return;
     }
+    for (const item of value.split(",")) {
+      const index = item.indexOf("=");
+      const key = index >= 0 ? item.slice(0, index).trim() : "";
+      const headerValue = index >= 0 ? item.slice(index + 1).trim() : "";
+      if (!key || !headerValue) {
+        context.addIssue({
+          code: "custom",
+          message: `${variableName} must use comma-separated key=value pairs`,
+        });
+        return;
+      }
+    }
+  });
+const otelLogsExporterString = z.enum(["none", "otlp"]).default("none");
+
+const fidesEnvObjectSchema = z.object({
+  FIDES_RUNTIME_ENV: defaultedTrimmedString("local"),
+  FIDES_OTP_ADAPTER: z.enum(["real", "mock", "disabled"]).default("mock"),
+  FIDES_BFF_BASE_URL: requiredTrimmedString,
+  FIDES_BROWSER_TRACING_ENDPOINT: optionalTrimmedString,
+  FIDES_BROWSER_TRACING_HEADERS: headersString("FIDES_BROWSER_TRACING_HEADERS"),
+  OTEL_LOGS_EXPORTER: otelLogsExporterString,
+  OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: optionalTrimmedString,
+  OTEL_EXPORTER_OTLP_LOGS_HEADERS: headersString("OTEL_EXPORTER_OTLP_LOGS_HEADERS"),
+  OTEL_SERVICE_NAME: defaultedTrimmedString("fides-web"),
+});
+
+export const fidesEnvSchema = fidesEnvObjectSchema.superRefine((value, context) => {
+  if (value.OTEL_LOGS_EXPORTER === "otlp" && !value.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
+    context.addIssue({
+      code: "custom",
+      path: ["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"],
+      message: "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is required when OTEL_LOGS_EXPORTER=otlp",
+    });
   }
 });
 
@@ -37,14 +61,6 @@ const legacyPublicEnvKeys = [
   "NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
   "NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_HEADERS",
 ] as const;
-
-export const fidesEnvSchema = z.object({
-  FIDES_RUNTIME_ENV: defaultedTrimmedString("local"),
-  FIDES_OTP_ADAPTER: z.enum(["real", "mock", "disabled"]).default("mock"),
-  FIDES_BFF_BASE_URL: requiredTrimmedString,
-  FIDES_BROWSER_TRACING_ENDPOINT: optionalTrimmedString,
-  FIDES_BROWSER_TRACING_HEADERS: tracingHeadersString,
-});
 
 export const smokeEnvSchema = z
   .object({
@@ -76,7 +92,9 @@ export function getFidesEnv(): FidesEnv {
 }
 
 export function getRuntimeEnvironmentFromEnv(): string {
-  const parsed = fidesEnvSchema.shape.FIDES_RUNTIME_ENV.safeParse(process.env.FIDES_RUNTIME_ENV);
+  const parsed = fidesEnvObjectSchema.shape.FIDES_RUNTIME_ENV.safeParse(
+    process.env.FIDES_RUNTIME_ENV,
+  );
   return parsed.success ? parsed.data : "local";
 }
 

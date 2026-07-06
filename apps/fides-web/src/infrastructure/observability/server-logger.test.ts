@@ -5,6 +5,11 @@ import {
   createServerLogger,
   type ServerLogField,
 } from "./server-logger";
+import { emitServerOtelLog } from "./server-otel-logs";
+
+vi.mock("./server-otel-logs", () => ({
+  emitServerOtelLog: vi.fn(),
+}));
 
 describe("server logger", () => {
   afterEach(() => {
@@ -37,6 +42,7 @@ describe("server logger", () => {
       request_id: "req_123",
     });
     expect(record.timestamp).toEqual(expect.any(String));
+    expect(emitServerOtelLog).toHaveBeenCalledWith(expect.objectContaining(record), sink);
   });
 
   it("extracts trace context from W3C traceparent", () => {
