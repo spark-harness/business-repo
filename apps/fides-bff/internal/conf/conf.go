@@ -87,12 +87,15 @@ type Observability struct {
 }
 
 type OTel struct {
-	SDKDisabled        bool   `json:"sdk_disabled"`
-	TracesExporter     string `json:"traces_exporter"`
-	TracesEndpoint     string `json:"traces_endpoint"`
-	TracesProtocol     string `json:"traces_protocol"`
-	TracesHeaders      string `json:"traces_headers"`
-	ResourceAttributes string `json:"resource_attributes"`
-	ServiceName        string `json:"service_name"`
-	ServiceVersion     string `json:"service_version"`
+	SDKDisabled        bool    `json:"sdk_disabled"`
+	TracesExporter     string  `json:"traces_exporter"`
+	TracesEndpoint     string  `json:"traces_endpoint"`
+	TracesProtocol     string  `json:"traces_protocol"`
+	TracesHeaders      string  `json:"traces_headers"`
+	TracesSampler      string  `json:"traces_sampler"`
+	TracesSamplerArg   float64 `json:"traces_sampler_arg"`
+	ResourceAttributes string  `json:"resource_attributes"`
+	ServiceName        string  `json:"service_name"`
+	ServiceVersion     string  `json:"service_version"`
+	SentryDSN          string  `json:"sentry_dsn"`
 }

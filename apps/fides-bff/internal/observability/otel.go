@@ -5,7 +5,10 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/getsentry/sentry-go"
+	sentryotel "github.com/getsentry/sentry-go/otel"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -21,7 +24,10 @@ import (
 type Shutdown func(context.Context) error
 
 func Setup(ctx context.Context, c conf.OTel, serviceName string, fallbackRelease string) (Shutdown, error) {
-	otel.SetTextMapPropagator(propagation.TraceContext{})
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		sentryotel.NewSentryPropagator(),
+	))
 	exporterName := strings.ToLower(firstNonEmpty(c.TracesExporter, "none"))
 	if c.SDKDisabled || exporterName == "none" {
 		return func(context.Context) error { return nil }, nil
@@ -58,12 +64,26 @@ func Setup(ctx context.Context, c conf.OTel, serviceName string, fallbackRelease
 		return nil, err
 	}
 
+	sentryEnabled, err := setupSentry(c, release, environment)
+	if err != nil {
+		return nil, err
+	}
+
 	provider := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),
 		sdktrace.WithResource(res),
 	)
+	if sentryEnabled {
+		provider.RegisterSpanProcessor(sentryotel.NewSentrySpanProcessor())
+	}
 	otel.SetTracerProvider(provider)
-	return provider.Shutdown, nil
+	return func(ctx context.Context) error {
+		err := provider.Shutdown(ctx)
+		if sentryEnabled {
+			sentry.Flush(2 * time.Second)
+		}
+		return err
+	}, nil
 }
 
 func newTraceExporter(ctx context.Context, c conf.OTel, headers map[string]string) (sdktrace.SpanExporter, error) {
@@ -127,6 +147,45 @@ func parseHeaders(raw string) (map[string]string, error) {
 
 func deploymentEnvironment(c conf.OTel) string {
 	return resourceAttribute(c.ResourceAttributes, "deployment.environment")
+}
+
+func setupSentry(c conf.OTel, release string, environment string) (bool, error) {
+	dsn := strings.TrimSpace(c.SentryDSN)
+	if dsn == "" {
+		return false, nil
+	}
+	rate, err := sentryTraceSampleRate(c)
+	if err != nil {
+		return false, err
+	}
+	if err := sentry.Init(sentry.ClientOptions{
+		Dsn:              dsn,
+		EnableTracing:    true,
+		TracesSampleRate: rate,
+		Release:          release,
+		Environment:      environment,
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func sentryTraceSampleRate(c conf.OTel) (float64, error) {
+	sampler := strings.ToLower(strings.TrimSpace(c.TracesSampler))
+	switch sampler {
+	case "", "always_on", "parentbased_always_on":
+		return 1, nil
+	case "always_off", "parentbased_always_off":
+		return 0, nil
+	case "traceidratio", "parentbased_traceidratio":
+		rate := c.TracesSamplerArg
+		if rate < 0 || rate > 1 {
+			return 0, errors.New("OTEL_TRACES_SAMPLER_ARG must be a number between 0 and 1")
+		}
+		return rate, nil
+	default:
+		return 0, errors.New("unsupported OTEL_TRACES_SAMPLER")
+	}
 }
 
 func resourceAttribute(raw string, key string) string {

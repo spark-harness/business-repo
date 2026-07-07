@@ -2,10 +2,16 @@ package observability
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/spark/bffkit"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -32,8 +38,9 @@ func TestSetup_DisabledKeepsNoopProvider(t *testing.T) {
 	if _, ok := otel.GetTracerProvider().(noop.TracerProvider); !ok {
 		t.Fatalf("tracer provider = %T, want noop provider", otel.GetTracerProvider())
 	}
-	if _, ok := otel.GetTextMapPropagator().(propagation.TraceContext); !ok {
-		t.Fatalf("propagator = %T, want TraceContext", otel.GetTextMapPropagator())
+	fields := strings.Join(otel.GetTextMapPropagator().Fields(), ",")
+	if !strings.Contains(fields, "traceparent") || !strings.Contains(fields, "sentry-trace") {
+		t.Fatalf("propagator fields = %q, want traceparent and sentry-trace", fields)
 	}
 }
 
@@ -107,6 +114,76 @@ func TestSetup_AcceptsFullOTLPEndpointURL(t *testing.T) {
 	}
 	if err := shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown: %v", err)
+	}
+}
+
+func TestSetup_SentrySpanProcessorExportsRemoteParentServerSpan(t *testing.T) {
+	originalProvider := otel.GetTracerProvider()
+	originalPropagator := otel.GetTextMapPropagator()
+	t.Cleanup(func() {
+		otel.SetTracerProvider(originalProvider)
+		otel.SetTextMapPropagator(originalPropagator)
+	})
+
+	envelopes := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read request body: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if strings.Contains(r.URL.Path, "/envelope/") || strings.Contains(r.URL.Path, "/envelope") {
+			envelopes <- string(body)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	shutdown, err := Setup(context.Background(), conf.OTel{
+		TracesExporter:     "otlp",
+		TracesEndpoint:     server.URL + "/v1/traces",
+		TracesProtocol:     "http/protobuf",
+		TracesSampler:      "parentbased_traceidratio",
+		TracesSamplerArg:   1.0,
+		ResourceAttributes: "deployment.environment=dev-1",
+		SentryDSN:          strings.Replace(server.URL, "http://", "http://public@", 1) + "/1",
+	}, "fides-bff", "dev")
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	traceID := "4bf92f3577b34da6a3ce929d0e0e4736"
+	parentSpanID := "00f067aa0ba902b7"
+	ctx := otel.GetTextMapPropagator().Extract(context.Background(), propagation.MapCarrier{
+		"traceparent": "00-" + traceID + "-" + parentSpanID + "-01",
+	})
+	ctx, span := otel.Tracer("github.com/spark/fides-bff/internal/observability").Start(ctx,
+		"POST /api/v1/auth/otp:send",
+		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
+		oteltrace.WithAttributes(attribute.String("http.route", "/api/v1/auth/otp:send")),
+	)
+	if got := span.SpanContext().TraceID().String(); got != traceID {
+		t.Fatalf("otel span trace id = %s, want %s", got, traceID)
+	}
+	span.End()
+	if err := shutdown(ctx); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+
+	select {
+	case envelope := <-envelopes:
+		if !strings.Contains(envelope, traceID) {
+			t.Fatalf("sentry envelope does not contain trace id %s: %s", traceID, envelope)
+		}
+		if !strings.Contains(envelope, parentSpanID) {
+			t.Fatalf("sentry envelope does not contain parent span id %s: %s", parentSpanID, envelope)
+		}
+		if !strings.Contains(envelope, "POST /api/v1/auth/otp:send") {
+			t.Fatalf("sentry envelope does not contain transaction name: %s", envelope)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for sentry transaction envelope")
 	}
 }
 
