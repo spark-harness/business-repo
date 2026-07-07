@@ -5,15 +5,15 @@ import (
 	"errors"
 	"net/url"
 	"strings"
-	"time"
 
-	"github.com/getsentry/sentry-go"
-	sentryotel "github.com/getsentry/sentry-go/otel"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/propagation"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
@@ -26,7 +26,6 @@ type Shutdown func(context.Context) error
 func Setup(ctx context.Context, c conf.OTel, serviceName string, fallbackRelease string) (Shutdown, error) {
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
-		sentryotel.NewSentryPropagator(),
 	))
 	exporterName := strings.ToLower(firstNonEmpty(c.TracesExporter, "none"))
 	if c.SDKDisabled || exporterName == "none" {
@@ -47,24 +46,7 @@ func Setup(ctx context.Context, c conf.OTel, serviceName string, fallbackRelease
 	if err != nil {
 		return nil, err
 	}
-	release := firstNonEmpty(c.ServiceVersion, fallbackRelease)
-	service := firstNonEmpty(c.ServiceName, serviceName)
-	environment := deploymentEnvironment(c)
-	attrs := []attribute.KeyValue{
-		semconv.ServiceName(service),
-		semconv.ServiceVersion(release),
-	}
-	if environment != "" {
-		attrs = append(attrs, semconv.DeploymentEnvironment(environment))
-	}
-	res, err := resource.New(ctx,
-		resource.WithAttributes(attrs...),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	sentryEnabled, err := setupSentry(c, release, environment)
+	res, err := newResource(ctx, c, serviceName, fallbackRelease)
 	if err != nil {
 		return nil, err
 	}
@@ -73,17 +55,40 @@ func Setup(ctx context.Context, c conf.OTel, serviceName string, fallbackRelease
 		sdktrace.WithBatcher(exporter),
 		sdktrace.WithResource(res),
 	)
-	if sentryEnabled {
-		provider.RegisterSpanProcessor(sentryotel.NewSentrySpanProcessor())
-	}
 	otel.SetTracerProvider(provider)
 	return func(ctx context.Context) error {
-		err := provider.Shutdown(ctx)
-		if sentryEnabled {
-			sentry.Flush(2 * time.Second)
-		}
-		return err
+		return provider.Shutdown(ctx)
 	}, nil
+}
+
+func SetupLogs(ctx context.Context, c conf.OTel, serviceName string, fallbackRelease string) (otellog.LoggerProvider, Shutdown, error) {
+	exporterName := strings.ToLower(firstNonEmpty(c.LogsExporter, "none"))
+	if c.SDKDisabled || exporterName == "none" {
+		return nil, func(context.Context) error { return nil }, nil
+	}
+	if strings.TrimSpace(c.LogsEndpoint) == "" {
+		return nil, func(context.Context) error { return nil }, nil
+	}
+	headers, err := parseHeaders(c.LogsHeaders)
+	if err != nil {
+		return nil, nil, err
+	}
+	if exporterName != "otlp" {
+		return nil, nil, errors.New("unsupported otel logs exporter")
+	}
+	exporter, err := newLogExporter(ctx, c, headers)
+	if err != nil {
+		return nil, nil, err
+	}
+	res, err := newResource(ctx, c, serviceName, fallbackRelease)
+	if err != nil {
+		return nil, nil, err
+	}
+	provider := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter)),
+		sdklog.WithResource(res),
+	)
+	return provider, provider.Shutdown, nil
 }
 
 func newTraceExporter(ctx context.Context, c conf.OTel, headers map[string]string) (sdktrace.SpanExporter, error) {
@@ -108,6 +113,22 @@ func newTraceExporter(ctx context.Context, c conf.OTel, headers map[string]strin
 		return otlptracegrpc.New(ctx, opts...)
 	default:
 		return nil, errors.New("unsupported otel protocol")
+	}
+}
+
+func newLogExporter(ctx context.Context, c conf.OTel, headers map[string]string) (sdklog.Exporter, error) {
+	switch strings.ToLower(firstNonEmpty(c.LogsProtocol, "http/protobuf")) {
+	case "http/protobuf", "http":
+		opts := []otlploghttp.Option{logHTTPEndpointOption(c.LogsEndpoint)}
+		if len(headers) > 0 {
+			opts = append(opts, otlploghttp.WithHeaders(headers))
+		}
+		if isInsecureEndpoint(c.LogsEndpoint) {
+			opts = append(opts, otlploghttp.WithInsecure())
+		}
+		return otlploghttp.New(ctx, opts...)
+	default:
+		return nil, errors.New("unsupported otel logs protocol")
 	}
 }
 
@@ -149,28 +170,7 @@ func deploymentEnvironment(c conf.OTel) string {
 	return resourceAttribute(c.ResourceAttributes, "deployment.environment")
 }
 
-func setupSentry(c conf.OTel, release string, environment string) (bool, error) {
-	dsn := strings.TrimSpace(c.SentryDSN)
-	if dsn == "" {
-		return false, nil
-	}
-	rate, err := sentryTraceSampleRate(c)
-	if err != nil {
-		return false, err
-	}
-	if err := sentry.Init(sentry.ClientOptions{
-		Dsn:              dsn,
-		EnableTracing:    true,
-		TracesSampleRate: rate,
-		Release:          release,
-		Environment:      environment,
-	}); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-func sentryTraceSampleRate(c conf.OTel) (float64, error) {
+func traceSampleRate(c conf.OTel) (float64, error) {
 	sampler := strings.ToLower(strings.TrimSpace(c.TracesSampler))
 	switch sampler {
 	case "", "always_on", "parentbased_always_on":
@@ -186,6 +186,20 @@ func sentryTraceSampleRate(c conf.OTel) (float64, error) {
 	default:
 		return 0, errors.New("unsupported OTEL_TRACES_SAMPLER")
 	}
+}
+
+func newResource(ctx context.Context, c conf.OTel, serviceName string, fallbackRelease string) (*resource.Resource, error) {
+	release := firstNonEmpty(c.ServiceVersion, fallbackRelease)
+	service := firstNonEmpty(c.ServiceName, serviceName)
+	environment := deploymentEnvironment(c)
+	attrs := []attribute.KeyValue{
+		semconv.ServiceName(service),
+		semconv.ServiceVersion(release),
+	}
+	if environment != "" {
+		attrs = append(attrs, semconv.DeploymentEnvironment(environment))
+	}
+	return resource.New(ctx, resource.WithAttributes(attrs...))
 }
 
 func resourceAttribute(raw string, key string) string {
@@ -206,6 +220,13 @@ func httpEndpointOption(endpoint string) otlptracehttp.Option {
 		return otlptracehttp.WithEndpointURL(endpoint)
 	}
 	return otlptracehttp.WithEndpoint(endpoint)
+}
+
+func logHTTPEndpointOption(endpoint string) otlploghttp.Option {
+	if strings.Contains(endpoint, "://") {
+		return otlploghttp.WithEndpointURL(endpoint)
+	}
+	return otlploghttp.WithEndpoint(endpoint)
 }
 
 func grpcEndpointOption(endpoint string) otlptracegrpc.Option {

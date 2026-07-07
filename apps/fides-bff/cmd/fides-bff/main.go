@@ -13,9 +13,12 @@ import (
 	"os"
 	"time"
 
+	"go.opentelemetry.io/otel/log"
+
 	"github.com/go-kratos/kratos/v3"
-	"github.com/go-kratos/kratos/v3/log"
+	klog "github.com/go-kratos/kratos/v3/log"
 	"github.com/go-kratos/kratos/v3/transport/http"
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 
 	"github.com/spark/fides-bff/internal/biz"
 	"github.com/spark/fides-bff/internal/observability"
@@ -34,10 +37,14 @@ func init() {
 	flag.StringVar(&flagconf, "conf", "configs/config.yaml", "config path, eg: -conf config.yaml")
 }
 
-func newLogger(writer io.Writer) *slog.Logger {
-	return log.NewLogger(
-		log.NewHandler(log.WithWriter(writer), log.WithFormat(log.FormatJSON), log.WithReplaceAttr(replaceLogAttr)),
-	).With(
+func newLogger(writer io.Writer, logProvider log.LoggerProvider) *slog.Logger {
+	handlers := []slog.Handler{
+		klog.NewHandler(klog.WithWriter(writer), klog.WithFormat(klog.FormatJSON), klog.WithReplaceAttr(replaceLogAttr)),
+	}
+	if logProvider != nil {
+		handlers = append(handlers, otelslog.NewHandler("github.com/spark/fides-bff", otelslog.WithLoggerProvider(logProvider)))
+	}
+	return slog.New(newFanoutHandler(handlers...)).With(
 		"service.name", Name,
 		"service.version", Version,
 	)
@@ -77,8 +84,6 @@ func newApp(logger *slog.Logger, hs *http.Server, registration *registration) *k
 func main() {
 	flag.Parse()
 
-	logger := newLogger(os.Stdout)
-
 	bc, err := loadBootstrap(loadConfigOptions{ConfigPath: flagconf})
 	if err != nil {
 		panic(err)
@@ -89,6 +94,14 @@ func main() {
 		panic(err)
 	}
 	defer func() { _ = otelShutdown(context.Background()) }()
+
+	logProvider, otelLogsShutdown, err := observability.SetupLogs(context.Background(), bc.Observability.OTel, Name, Version)
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = otelLogsShutdown(context.Background()) }()
+
+	logger := newLogger(os.Stdout, logProvider)
 
 	app, cleanup, err := wireApp(&bc.Server, &bc.Applicant, &bc.Quote, &bc.Origination, &bc.Auth, &bc.Registry, bc.Observability, biz.Version(Version), logger)
 	if err != nil {

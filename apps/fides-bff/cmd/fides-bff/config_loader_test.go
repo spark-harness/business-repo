@@ -94,7 +94,11 @@ func TestLoadBootstrap_KratosFileEnvPlaceholders(t *testing.T) {
 	t.Setenv("OTEL_TRACES_EXPORTER", "otlp")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://otel.local/v1/traces")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "http/protobuf")
-	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "x-sentry-auth=token")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "authorization=bearer trace-token")
+	t.Setenv("OTEL_LOGS_EXPORTER", "otlp")
+	t.Setenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "http://otel.local/v1/logs")
+	t.Setenv("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", "http/protobuf")
+	t.Setenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS", "authorization=bearer log-token")
 	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment=dev-1")
 	t.Setenv("OTEL_SERVICE_NAME", "fides-bff")
 	t.Setenv("OTEL_SERVICE_VERSION", "runtime")
@@ -118,7 +122,11 @@ func TestLoadBootstrap_KratosFileEnvPlaceholders(t *testing.T) {
 	if got.Observability.OTel.TracesExporter != "otlp" ||
 		got.Observability.OTel.TracesEndpoint != "http://otel.local/v1/traces" ||
 		got.Observability.OTel.TracesProtocol != "http/protobuf" ||
-		got.Observability.OTel.TracesHeaders != "x-sentry-auth=token" ||
+		got.Observability.OTel.TracesHeaders != "authorization=bearer trace-token" ||
+		got.Observability.OTel.LogsExporter != "otlp" ||
+		got.Observability.OTel.LogsEndpoint != "http://otel.local/v1/logs" ||
+		got.Observability.OTel.LogsProtocol != "http/protobuf" ||
+		got.Observability.OTel.LogsHeaders != "authorization=bearer log-token" ||
 		got.Observability.OTel.ResourceAttributes != "deployment.environment=dev-1" ||
 		got.Observability.OTel.ServiceName != "fides-bff" ||
 		got.Observability.OTel.ServiceVersion != "runtime" {
@@ -221,6 +229,10 @@ observability:
     traces_endpoint: "${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:}"
     traces_protocol: "${OTEL_EXPORTER_OTLP_TRACES_PROTOCOL:http/protobuf}"
     traces_headers: "${OTEL_EXPORTER_OTLP_TRACES_HEADERS:}"
+    logs_exporter: "${OTEL_LOGS_EXPORTER:none}"
+    logs_endpoint: "${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:}"
+    logs_protocol: "${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL:http/protobuf}"
+    logs_headers: "${OTEL_EXPORTER_OTLP_LOGS_HEADERS:}"
     resource_attributes: "${OTEL_RESOURCE_ATTRIBUTES:deployment.environment=local}"
     service_name: "${OTEL_SERVICE_NAME:fides-bff}"
     service_version: "${OTEL_SERVICE_VERSION:dev}"

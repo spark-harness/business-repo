@@ -66,21 +66,25 @@ ORIGINATION_GRPC_TARGET=127.0.0.1:19091 \
 make run
 ```
 
-OpenTelemetry 通过官方 SDK 和 OTLP exporter 初始化。默认 `observability.otel.traces_exporter=none`；启用时使用标准 `OTEL_*` 环境变量设置 traces exporter、endpoint、protocol 和 headers，可指向 OpenTelemetry Collector，也可按 Sentry Direct OTLP 的项目 endpoint 直连。应用代码不依赖 Sentry SDK、Sentry exporter 或供应商专用 span processor。
+OpenTelemetry 通过官方 SDK 和 OTLP exporter 初始化。默认 `observability.otel.traces_exporter=none`、`observability.otel.logs_exporter=none`；启用时使用标准 `OTEL_*` 环境变量设置 traces/logs exporter、endpoint、protocol 和 headers，可指向 OpenTelemetry Collector，也可直连兼容 OTLP 的后端。应用代码不依赖供应商 SDK、供应商 exporter 或供应商专用 span processor。
 
-本地验证 Sentry Direct OTLP 时，按 DSN 拆出 host、project id、public key 后配置：
+本地验证 OTLP HTTP 后端时，按后端提供的 traces/logs endpoint 和认证 header 配置：
 
 ```yaml
 observability:
   otel:
     sdk_disabled: false
-    traces_exporter: otlp
-    traces_endpoint: "<otlp-traces-endpoint>"
-    traces_protocol: http/protobuf
-    traces_headers: "x-sentry-auth=<otlp-auth-header>"
-    resource_attributes: "deployment.environment=local"
-    service_name: fides-bff
-    service_version: dev
+	    traces_exporter: otlp
+	    traces_endpoint: "<otlp-traces-endpoint>"
+	    traces_protocol: http/protobuf
+	    traces_headers: "authorization=<otlp-auth-header>"
+	    logs_exporter: otlp
+	    logs_endpoint: "<otlp-logs-endpoint>"
+	    logs_protocol: http/protobuf
+	    logs_headers: "authorization=<otlp-auth-header>"
+	    resource_attributes: "deployment.environment=local"
+	    service_name: fides-bff
+	    service_version: dev
 ```
 
 这只是 OTLP HTTP exporter 的 header 配置；切换到 Collector 或其他 OTLP 后端时只需要替换 endpoint / headers。
