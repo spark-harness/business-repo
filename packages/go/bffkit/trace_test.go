@@ -15,10 +15,12 @@ import (
 )
 
 type testLogger struct {
+	ctx     context.Context
 	keyvals []any
 }
 
-func (l *testLogger) Info(_ string, keyvals ...any) {
+func (l *testLogger) InfoContext(ctx context.Context, _ string, keyvals ...any) {
+	l.ctx = ctx
 	l.keyvals = append(l.keyvals, keyvals...)
 }
 
@@ -68,6 +70,9 @@ func TestTraceFilter_setsContextHeadersAndStructuredLogFields(t *testing.T) {
 	}
 	if !hasKey(logger.keyvals, "span_id") {
 		t.Fatalf("expected access log to include span_id, got %#v", logger.keyvals)
+	}
+	if spanContext := oteltrace.SpanContextFromContext(logger.ctx); !spanContext.IsValid() {
+		t.Fatalf("expected access log context to include valid span context")
 	}
 	if !hasKeyValue(logger.keyvals, "deployment.environment", "dev-1") {
 		t.Fatalf("expected deployment environment in access log, got %#v", logger.keyvals)

@@ -36,7 +36,7 @@ const (
 )
 
 type AccessLogger interface {
-	Info(msg string, args ...any)
+	InfoContext(ctx context.Context, msg string, args ...any)
 }
 
 type TraceFilterOption func(*traceFilterConfig)
@@ -137,7 +137,7 @@ func TraceFilter(logger AccessLogger, opts ...TraceFilterOption) khttp.FilterFun
 				if recorder.errorCode != "" {
 					keyvals = append(keyvals, "error_code", recorder.errorCode)
 				}
-				logger.Info("http request", keyvals...)
+				logger.InfoContext(ctx, "http request", keyvals...)
 			}
 		})
 	}
