@@ -3,6 +3,8 @@ module github.com/spark/fides-bff
 go 1.26.2
 
 require (
+	github.com/getsentry/sentry-go v0.42.0
+	github.com/getsentry/sentry-go/otel v0.42.0
 	github.com/go-kratos/kratos/contrib/registry/consul/v3 v3.0.0-20260626125723-668db92c2c00
 	github.com/go-kratos/kratos/v3 v3.0.0
 	github.com/google/wire v0.7.0
