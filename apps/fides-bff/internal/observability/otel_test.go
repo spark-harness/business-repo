@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +16,10 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
+	tracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	tracev1 "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/spark/fides-bff/internal/conf"
 )
@@ -39,8 +43,8 @@ func TestSetup_DisabledKeepsNoopProvider(t *testing.T) {
 		t.Fatalf("tracer provider = %T, want noop provider", otel.GetTracerProvider())
 	}
 	fields := strings.Join(otel.GetTextMapPropagator().Fields(), ",")
-	if !strings.Contains(fields, "traceparent") || !strings.Contains(fields, "sentry-trace") {
-		t.Fatalf("propagator fields = %q, want traceparent and sentry-trace", fields)
+	if !strings.Contains(fields, "traceparent") {
+		t.Fatalf("propagator fields = %q, want traceparent", fields)
 	}
 }
 
@@ -107,7 +111,7 @@ func TestSetup_AcceptsFullOTLPEndpointURL(t *testing.T) {
 		TracesExporter: "otlp",
 		TracesEndpoint: "http://localhost:4318/v1/traces",
 		TracesProtocol: "http/protobuf",
-		TracesHeaders:  "x-sentry-auth=token",
+		TracesHeaders:  "authorization=bearer token",
 	}, "fides-bff", "dev")
 	if err != nil {
 		t.Fatalf("setup: %v", err)
@@ -117,7 +121,7 @@ func TestSetup_AcceptsFullOTLPEndpointURL(t *testing.T) {
 	}
 }
 
-func TestSetup_SentrySpanProcessorExportsRemoteParentServerSpan(t *testing.T) {
+func TestSetup_OTLPExportsRemoteParentServerSpan(t *testing.T) {
 	originalProvider := otel.GetTracerProvider()
 	originalPropagator := otel.GetTextMapPropagator()
 	t.Cleanup(func() {
@@ -125,7 +129,7 @@ func TestSetup_SentrySpanProcessorExportsRemoteParentServerSpan(t *testing.T) {
 		otel.SetTextMapPropagator(originalPropagator)
 	})
 
-	envelopes := make(chan string, 1)
+	requests := make(chan *tracepb.ExportTraceServiceRequest, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -133,8 +137,14 @@ func TestSetup_SentrySpanProcessorExportsRemoteParentServerSpan(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		if strings.Contains(r.URL.Path, "/envelope/") || strings.Contains(r.URL.Path, "/envelope") {
-			envelopes <- string(body)
+		if r.URL.Path == "/v1/traces" {
+			var request tracepb.ExportTraceServiceRequest
+			if err := proto.Unmarshal(body, &request); err != nil {
+				t.Errorf("unmarshal OTLP trace request: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			requests <- &request
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -147,7 +157,6 @@ func TestSetup_SentrySpanProcessorExportsRemoteParentServerSpan(t *testing.T) {
 		TracesSampler:      "parentbased_traceidratio",
 		TracesSamplerArg:   1.0,
 		ResourceAttributes: "deployment.environment=dev-1",
-		SentryDSN:          strings.Replace(server.URL, "http://", "http://public@", 1) + "/1",
 	}, "fides-bff", "dev")
 	if err != nil {
 		t.Fatalf("setup: %v", err)
@@ -172,24 +181,38 @@ func TestSetup_SentrySpanProcessorExportsRemoteParentServerSpan(t *testing.T) {
 	}
 
 	select {
-	case envelope := <-envelopes:
-		if !strings.Contains(envelope, traceID) {
-			t.Fatalf("sentry envelope does not contain trace id %s: %s", traceID, envelope)
+	case request := <-requests:
+		span := findOTLPSpan(request, "POST /api/v1/auth/otp:send")
+		if span == nil {
+			t.Fatalf("OTLP request does not contain server span: %v", request)
 		}
-		if !strings.Contains(envelope, parentSpanID) {
-			t.Fatalf("sentry envelope does not contain parent span id %s: %s", parentSpanID, envelope)
+		if got := hex.EncodeToString(span.TraceId); got != traceID {
+			t.Fatalf("OTLP span trace id = %s, want %s", got, traceID)
 		}
-		if !strings.Contains(envelope, "POST /api/v1/auth/otp:send") {
-			t.Fatalf("sentry envelope does not contain transaction name: %s", envelope)
+		if got := hex.EncodeToString(span.ParentSpanId); got != parentSpanID {
+			t.Fatalf("OTLP parent span id = %s, want %s", got, parentSpanID)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for sentry transaction envelope")
+		t.Fatal("timed out waiting for OTLP trace export")
 	}
+}
+
+func findOTLPSpan(request *tracepb.ExportTraceServiceRequest, name string) *tracev1.Span {
+	for _, resourceSpans := range request.ResourceSpans {
+		for _, scopeSpans := range resourceSpans.ScopeSpans {
+			for _, span := range scopeSpans.Spans {
+				if span.Name == name {
+					return span
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func TestSetup_RejectsVendorExporter(t *testing.T) {
 	_, err := Setup(context.Background(), conf.OTel{
-		TracesExporter: "sentry",
+		TracesExporter: "vendor",
 		TracesEndpoint: "localhost:4318",
 		TracesProtocol: "http/protobuf",
 	}, "fides-bff", "dev")
@@ -199,7 +222,7 @@ func TestSetup_RejectsVendorExporter(t *testing.T) {
 }
 
 func TestParseHeaders_RejectsBlankEntries(t *testing.T) {
-	_, err := parseHeaders("x-sentry-auth=,authorization=bearer token")
+	_, err := parseHeaders("x-otlp-auth=,authorization=bearer token")
 	if err == nil {
 		t.Fatal("expected blank header error")
 	}
@@ -216,13 +239,13 @@ func TestParseHeaders_TrimsEntries(t *testing.T) {
 }
 
 func TestParseHeaders_DecodesEscapedEntries(t *testing.T) {
-	got, err := parseHeaders("x-sentry-auth=Sentry%20sentry_key%3Dabc%2Csentry_client%3Dfides-bff")
+	got, err := parseHeaders("x-otlp-auth=Bearer%20token%3Dabc%2Cclient%3Dfides-bff")
 	if err != nil {
 		t.Fatalf("parseHeaders: %v", err)
 	}
-	want := "Sentry sentry_key=abc,sentry_client=fides-bff"
-	if got["x-sentry-auth"] != want {
-		t.Fatalf("x-sentry-auth = %q, want %q", got["x-sentry-auth"], want)
+	want := "Bearer token=abc,client=fides-bff"
+	if got["x-otlp-auth"] != want {
+		t.Fatalf("x-otlp-auth = %q, want %q", got["x-otlp-auth"], want)
 	}
 }
 
