@@ -170,24 +170,6 @@ func deploymentEnvironment(c conf.OTel) string {
 	return resourceAttribute(c.ResourceAttributes, "deployment.environment")
 }
 
-func traceSampleRate(c conf.OTel) (float64, error) {
-	sampler := strings.ToLower(strings.TrimSpace(c.TracesSampler))
-	switch sampler {
-	case "", "always_on", "parentbased_always_on":
-		return 1, nil
-	case "always_off", "parentbased_always_off":
-		return 0, nil
-	case "traceidratio", "parentbased_traceidratio":
-		rate := c.TracesSamplerArg
-		if rate < 0 || rate > 1 {
-			return 0, errors.New("OTEL_TRACES_SAMPLER_ARG must be a number between 0 and 1")
-		}
-		return rate, nil
-	default:
-		return 0, errors.New("unsupported OTEL_TRACES_SAMPLER")
-	}
-}
-
 func newResource(ctx context.Context, c conf.OTel, serviceName string, fallbackRelease string) (*resource.Resource, error) {
 	release := firstNonEmpty(c.ServiceVersion, fallbackRelease)
 	service := firstNonEmpty(c.ServiceName, serviceName)
