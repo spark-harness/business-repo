@@ -11,7 +11,6 @@ import (
 	quotev1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/quote/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
@@ -36,7 +35,7 @@ func TestQuoteClient_CreateQuoteCallsQuoteAPIOverGRPC(t *testing.T) {
 	client := &QuoteClient{
 		resolver:    staticResolver(server.target),
 		timeout:     time.Second,
-		dialOptions: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
+		dialOptions: testDialOptions(),
 	}
 	result, err := client.CreateQuote(context.Background(), biz.CreateQuoteCommand{
 		ApplicantID: "applicant_001",
@@ -107,7 +106,7 @@ func TestQuoteClient_CreateQuoteMapsGRPCErrors(t *testing.T) {
 			client := &QuoteClient{
 				resolver:    staticResolver(server.target),
 				timeout:     time.Second,
-				dialOptions: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
+				dialOptions: testDialOptions(),
 			}
 			_, err := client.CreateQuote(context.Background(), biz.CreateQuoteCommand{ApplicantID: "applicant_001"})
 			pricingErr, ok := err.(*biz.PricingError)

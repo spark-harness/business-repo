@@ -13,7 +13,6 @@ import (
 	"github.com/spark/bffkit"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
@@ -398,7 +397,7 @@ func newTestOriginationClient(target string) *OriginationClient {
 	return &OriginationClient{
 		resolver:    staticResolver(target),
 		timeout:     time.Second,
-		dialOptions: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
+		dialOptions: testDialOptions(),
 	}
 }
 

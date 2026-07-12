@@ -14,10 +14,7 @@ import (
 
 	quotev1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/quote/v1"
 	"github.com/spark/bffkit"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	grpccodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -27,8 +24,6 @@ import (
 	"github.com/spark/fides-bff/internal/biz"
 	"github.com/spark/fides-bff/internal/conf"
 )
-
-var quoteTracer = otel.Tracer("github.com/spark/fides-bff/internal/data")
 
 const (
 	quoteCodeAmountOutOfRange = "QUOTE-PARAM-0002"
@@ -60,6 +55,7 @@ func NewQuoteClient(c *conf.Quote) *QuoteClient {
 	} else {
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
 	}
+	opts = append(opts, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	return &QuoteClient{
 		resolver:    grpcResolver(target, NewQuoteGRPCConsulResolver(consul)),
 		timeout:     timeout,
@@ -116,24 +112,9 @@ func (c *QuoteClient) client(ctx context.Context) (quotev1pb.QuoteServiceClient,
 }
 
 func (c *QuoteClient) rpcContext(ctx context.Context, command biz.CreateQuoteCommand, method string) (context.Context, context.CancelFunc, func(error)) {
-	ctx, span := quoteTracer.Start(ctx,
-		"QuoteService/"+method,
-		oteltrace.WithSpanKind(oteltrace.SpanKindClient),
-		oteltrace.WithAttributes(
-			attribute.String("rpc.system", "grpc"),
-			attribute.String("rpc.service", "vesta.lendora.quote.v1.QuoteService"),
-			attribute.String("rpc.method", method),
-		),
-	)
 	ctx = bffkit.ContextWithPrincipal(ctx, bffkit.Principal{ApplicantID: command.ApplicantID})
 	ctx = bffkit.OutgoingGRPCContext(ctx)
-	endSpan := func(err error) {
-		if err != nil {
-			span.SetStatus(codes.Error, status.Code(err).String())
-			span.SetAttributes(attribute.String("rpc.grpc.status_code", status.Code(err).String()))
-		}
-		span.End()
-	}
+	endSpan := func(error) {}
 	if c == nil || c.timeout <= 0 {
 		return ctx, func() {}, endSpan
 	}

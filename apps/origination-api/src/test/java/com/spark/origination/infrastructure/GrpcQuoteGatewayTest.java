@@ -3,6 +3,7 @@ package com.spark.origination.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.spark.common.spring.security.RequestPrincipalGrpcClientInterceptor;
 import com.spark.common.spring.security.RequestPrincipalGrpcServerInterceptor;
 import com.spark.origination.application.ForbiddenException;
 import com.spark.origination.application.QuoteExpiredException;
@@ -25,8 +26,8 @@ import io.grpc.Status;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.StreamObserver;
-import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.baggage.propagation.W3CBaggagePropagator;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanContext;
@@ -37,6 +38,7 @@ import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import io.opentelemetry.context.propagation.ContextPropagators;
 import io.opentelemetry.context.propagation.TextMapPropagator;
+import io.opentelemetry.instrumentation.grpc.v1_6.GrpcTelemetry;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.samplers.Sampler;
@@ -75,7 +77,12 @@ class GrpcQuoteGatewayTest {
                 .setPropagators(ContextPropagators.create(TextMapPropagator.composite(
                         W3CTraceContextPropagator.getInstance(), W3CBaggagePropagator.getInstance())))
                 .build();
-        gateway = new GrpcQuoteGateway(QuoteServiceGrpc.newBlockingStub(channel), Duration.ofSeconds(1), openTelemetry);
+        gateway = new GrpcQuoteGateway(
+                QuoteServiceGrpc.newBlockingStub(channel)
+                        .withInterceptors(
+                                GrpcTelemetry.builder(openTelemetry).build().createClientInterceptor(),
+                                new RequestPrincipalGrpcClientInterceptor()),
+                Duration.ofSeconds(1));
         TestPrincipal.set("applicant_001");
     }
 
@@ -128,7 +135,7 @@ class GrpcQuoteGatewayTest {
     }
 
     @Test
-    void get_whenCurrentBaggageExists_doesNotForwardBaggage() {
+    void get_whenCurrentBaggageExists_usesConfiguredOpenTelemetryPropagators() {
         quoteService.quote = quote("quote_1");
         Context context = Baggage.builder()
                 .put("sensitive", "secret")
@@ -141,7 +148,7 @@ class GrpcQuoteGatewayTest {
         }
 
         assertThat(quote.quoteId()).isEqualTo("quote_1");
-        assertThat(quoteService.lastBaggage).isNull();
+        assertThat(quoteService.lastBaggage).isEqualTo("sensitive=secret");
     }
 
     @Test

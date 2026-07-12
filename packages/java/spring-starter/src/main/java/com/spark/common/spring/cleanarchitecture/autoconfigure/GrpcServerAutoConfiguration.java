@@ -1,7 +1,7 @@
 package com.spark.common.spring.cleanarchitecture.autoconfigure;
 
 import com.spark.common.spring.cleanarchitecture.grpc.GrpcServerLifecycle;
-import com.spark.common.spring.cleanarchitecture.grpc.OpenTelemetryGrpcServerInterceptor;
+import com.spark.common.spring.cleanarchitecture.grpc.GrpcServerMetadataInterceptor;
 import com.spark.common.spring.security.RequestPrincipalGrpcServerInterceptor;
 import io.grpc.BindableService;
 import io.grpc.Server;
@@ -10,6 +10,7 @@ import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.instrumentation.grpc.v1_6.GrpcTelemetry;
 import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,6 +20,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 
 @AutoConfiguration
 @ConditionalOnClass({Server.class, NettyServerBuilder.class, ProtoReflectionServiceV1.class})
@@ -47,14 +50,28 @@ public class GrpcServerAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean(OpenTelemetryGrpcServerInterceptor.class)
+    @ConditionalOnMissingBean(name = "openTelemetryGrpcServerInterceptor")
     @ConditionalOnProperty(
             prefix = "spark.grpc.server.tracing",
             name = "enabled",
             havingValue = "true",
             matchIfMissing = true)
-    OpenTelemetryGrpcServerInterceptor openTelemetryGrpcServerInterceptor(
-            ObjectProvider<OpenTelemetry> openTelemetry) {
-        return new OpenTelemetryGrpcServerInterceptor(openTelemetry.getIfAvailable(GlobalOpenTelemetry::get));
+    @Order(Ordered.HIGHEST_PRECEDENCE)
+    ServerInterceptor openTelemetryGrpcServerInterceptor(ObjectProvider<OpenTelemetry> openTelemetry) {
+        return GrpcTelemetry.builder(openTelemetry.getIfAvailable(GlobalOpenTelemetry::get))
+                .build()
+                .createServerInterceptor();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(GrpcServerMetadataInterceptor.class)
+    @ConditionalOnProperty(
+            prefix = "spark.grpc.server.tracing",
+            name = "enabled",
+            havingValue = "true",
+            matchIfMissing = true)
+    @Order(Ordered.HIGHEST_PRECEDENCE + 50)
+    GrpcServerMetadataInterceptor grpcServerMetadataInterceptor() {
+        return new GrpcServerMetadataInterceptor();
     }
 }

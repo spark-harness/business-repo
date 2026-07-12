@@ -3,7 +3,6 @@ package com.spark.applicant.adapter.inbound.grpc;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.spark.common.spring.cleanarchitecture.grpc.OpenTelemetryGrpcServerInterceptor;
 import com.spark.applicant.application.auth.AuthPolicy;
 import com.spark.applicant.application.auth.RefreshTokenUseCase;
 import com.spark.applicant.application.auth.SendOtpUseCase;
@@ -26,7 +25,6 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ForwardingClientCall;
-import io.grpc.ForwardingClientCallListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -36,18 +34,17 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.opentelemetry.instrumentation.grpc.v1_6.GrpcTelemetry;
 import io.opentelemetry.sdk.testing.junit5.OpenTelemetryExtension;
 import java.io.IOException;
 import java.time.Clock;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 class ApplicantAuthGrpcAdapterTest {
-    private static final Metadata.Key<String> TRACE_ID_METADATA_KEY =
-            Metadata.Key.of("x-trace-id", Metadata.ASCII_STRING_MARSHALLER);
     private static final Metadata.Key<String> TRACEPARENT_METADATA_KEY =
             Metadata.Key.of("traceparent", Metadata.ASCII_STRING_MARSHALLER);
     @RegisterExtension
@@ -56,7 +53,6 @@ class ApplicantAuthGrpcAdapterTest {
     private io.grpc.Server server;
     private ManagedChannel channel;
     private ApplicantAuthServiceGrpc.ApplicantAuthServiceBlockingStub stub;
-    private TraceMetadataCapture traceMetadataCapture;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -88,12 +84,13 @@ class ApplicantAuthGrpcAdapterTest {
                                 verifyOtpUseCase,
                                 refreshTokenUseCase,
                                 new SimpleMeterRegistry()),
-                        new OpenTelemetryGrpcServerInterceptor(OPEN_TELEMETRY.getOpenTelemetry())))
+                        GrpcTelemetry.builder(OPEN_TELEMETRY.getOpenTelemetry())
+                                .build()
+                                .createServerInterceptor()))
                 .build()
                 .start();
         channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
-        traceMetadataCapture = new TraceMetadataCapture();
-        stub = ApplicantAuthServiceGrpc.newBlockingStub(ClientInterceptors.intercept(channel, traceMetadataCapture));
+        stub = ApplicantAuthServiceGrpc.newBlockingStub(channel);
     }
 
     @AfterEach
@@ -117,8 +114,7 @@ class ApplicantAuthGrpcAdapterTest {
         assertThat(response.getChallengeId()).isNotBlank();
         assertThat(response.getExpiresInSec()).isEqualTo(300);
         assertThat(response.getResendAfterSec()).isEqualTo(60);
-        assertThat(traceMetadataCapture.traceId()).matches("[0-9a-f]{32}");
-        assertThat(traceMetadataCapture.traceId()).isNotEqualTo("00000000000000000000000000000000");
+        assertServerTraceIsValid();
     }
 
     @Test
@@ -133,8 +129,7 @@ class ApplicantAuthGrpcAdapterTest {
                 .isInstanceOf(StatusRuntimeException.class)
                 .extracting(error -> ((StatusRuntimeException) error).getStatus().getCode())
                 .isEqualTo(Status.Code.INVALID_ARGUMENT);
-        assertThat(traceMetadataCapture.traceId()).matches("[0-9a-f]{32}");
-        assertThat(traceMetadataCapture.traceId()).isNotEqualTo("00000000000000000000000000000000");
+        assertServerTraceIsValid();
     }
 
     @Test
@@ -152,7 +147,7 @@ class ApplicantAuthGrpcAdapterTest {
                 .build());
 
         assertThat(response.getChallengeId()).isNotBlank();
-        assertThat(traceMetadataCapture.traceId()).isEqualTo(incomingTraceId);
+        assertServerTraceId(incomingTraceId);
     }
 
     @Test
@@ -199,42 +194,18 @@ class ApplicantAuthGrpcAdapterTest {
         assertThat(accessToken).isNotEqualTo(login.getAccessToken());
     }
 
-    private static final class TraceMetadataCapture implements ClientInterceptor {
-        private String traceId;
+    private static void assertServerTraceIsValid() {
+        assertThat(OPEN_TELEMETRY.getSpans()).isNotEmpty();
+        assertThat(OPEN_TELEMETRY.getSpans())
+                .anySatisfy(span -> assertThat(span.getSpanContext().getTraceId())
+                        .matches("[0-9a-f]{32}")
+                        .isNotEqualTo("00000000000000000000000000000000"));
+    }
 
-        String traceId() {
-            return traceId;
-        }
-
-        @Override
-        public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-                MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-            return new ForwardingClientCall.SimpleForwardingClientCall<>(next.newCall(method, callOptions)) {
-                @Override
-                public void start(Listener<RespT> responseListener, Metadata headers) {
-                    super.start(new ForwardingClientCallListener.SimpleForwardingClientCallListener<>(responseListener) {
-                        @Override
-                        public void onHeaders(Metadata headers) {
-                            capture(headers);
-                            super.onHeaders(headers);
-                        }
-
-                        @Override
-                        public void onClose(Status status, Metadata trailers) {
-                            capture(trailers);
-                            super.onClose(status, trailers);
-                        }
-                    }, headers);
-                }
-            };
-        }
-
-        private void capture(Metadata metadata) {
-            String value = metadata.get(TRACE_ID_METADATA_KEY);
-            if (value != null) {
-                traceId = value;
-            }
-        }
+    private static void assertServerTraceId(String traceId) {
+        assertThat(OPEN_TELEMETRY.getSpans()).isNotEmpty();
+        assertThat(OPEN_TELEMETRY.getSpans())
+                .anySatisfy(span -> assertThat(span.getSpanContext().getTraceId()).isEqualTo(traceId));
     }
 
     private static final class RequestMetadataInjector implements ClientInterceptor {
@@ -249,7 +220,7 @@ class ApplicantAuthGrpcAdapterTest {
                 MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
             return new ForwardingClientCall.SimpleForwardingClientCall<>(next.newCall(method, callOptions)) {
                 @Override
-                public void start(Listener<RespT> responseListener, Metadata headers) {
+                public void start(ClientCall.Listener<RespT> responseListener, Metadata headers) {
                     headers.merge(metadata);
                     super.start(responseListener, headers);
                 }

@@ -15,10 +15,7 @@ import (
 
 	originationv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/origination/v1"
 	"github.com/spark/bffkit"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	grpccodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -28,8 +25,6 @@ import (
 	"github.com/spark/fides-bff/internal/biz"
 	"github.com/spark/fides-bff/internal/conf"
 )
-
-var originationTracer = otel.Tracer("github.com/spark/fides-bff/internal/data")
 
 const (
 	originationCodeAuth          = "ORIGINATION-AUTH-0001"
@@ -67,6 +62,7 @@ func NewOriginationClient(c *conf.Origination) *OriginationClient {
 	} else {
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
 	}
+	opts = append(opts, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	return &OriginationClient{
 		resolver:    grpcResolver(target, NewOriginationGRPCConsulResolver(consul)),
 		timeout:     timeout,
@@ -209,27 +205,9 @@ func (c *OriginationClient) client(ctx context.Context) (originationv1pb.Origina
 }
 
 func (c *OriginationClient) rpcContext(ctx context.Context, applicantID string, method string) (context.Context, context.CancelFunc, func(error, string)) {
-	ctx, span := originationTracer.Start(ctx,
-		"OriginationLoanApplicationService/"+method,
-		oteltrace.WithSpanKind(oteltrace.SpanKindClient),
-		oteltrace.WithAttributes(
-			attribute.String("rpc.system", "grpc"),
-			attribute.String("rpc.service", "vesta.lendora.origination.v1.OriginationLoanApplicationService"),
-			attribute.String("rpc.method", method),
-		),
-	)
 	ctx = bffkit.ContextWithPrincipal(ctx, bffkit.Principal{ApplicantID: applicantID})
 	ctx = bffkit.OutgoingGRPCContext(ctx)
-	endSpan := func(err error, errorCode string) {
-		if err != nil {
-			span.SetStatus(codes.Error, status.Code(err).String())
-			span.SetAttributes(attribute.String("rpc.grpc.status_code", status.Code(err).String()))
-			if errorCode != "" {
-				span.SetAttributes(attribute.String("error_code", errorCode))
-			}
-		}
-		span.End()
-	}
+	endSpan := func(error, string) {}
 	if c == nil || c.timeout <= 0 {
 		return ctx, func() {}, endSpan
 	}

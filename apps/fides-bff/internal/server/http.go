@@ -11,6 +11,7 @@ import (
 	khttp "github.com/go-kratos/kratos/v3/transport/http"
 	fidesbffv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/fides-bff/v1"
 	"github.com/spark/bffkit"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
@@ -51,6 +52,7 @@ func NewHTTPServerWithObservability(
 		khttp.ErrorEncoder(bffkit.ErrorEncoder),
 		khttp.ResponseEncoder(compatResponseEncoder),
 		khttp.Filter(
+			otelhttp.NewMiddleware("fides-bff"),
 			bffkit.TraceFilter(logger, bffkit.WithDeploymentEnvironment(resourceAttribute(observability.OTel.ResourceAttributes, "deployment.environment"))),
 			bffkit.CORSFilter(bffkit.CORSConfig{
 				AllowedOrigins: c.CORS.AllowedOrigins,

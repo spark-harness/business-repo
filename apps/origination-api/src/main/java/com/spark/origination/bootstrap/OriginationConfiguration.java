@@ -1,5 +1,6 @@
 package com.spark.origination.bootstrap;
 
+import com.spark.common.spring.security.RequestPrincipalGrpcClientInterceptor;
 import com.spark.origination.application.AdvanceApplicationStepUseCase;
 import com.spark.origination.application.CreateLoanApplicationUseCase;
 import com.spark.origination.application.GetLoanApplicationUseCase;
@@ -10,11 +11,12 @@ import com.spark.origination.application.QuoteGateway;
 import com.spark.origination.infrastructure.GrpcQuoteGateway;
 import com.vesta.lendora.quote.v1.QuoteServiceGrpc;
 import com.zaxxer.hikari.HikariDataSource;
-import io.opentelemetry.api.OpenTelemetry;
-import java.time.Clock;
-import javax.sql.DataSource;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.instrumentation.grpc.v1_6.GrpcTelemetry;
+import java.time.Clock;
+import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.flyway.FlywayMigrationInitializer;
@@ -31,9 +33,13 @@ public class OriginationConfiguration {
     }
 
     @Bean(destroyMethod = "shutdown")
-    ManagedChannel quoteApiChannel(OriginationProperties properties) {
+    ManagedChannel quoteApiChannel(
+            OriginationProperties properties,
+            OpenTelemetry openTelemetry,
+            RequestPrincipalGrpcClientInterceptor principalInterceptor) {
         return ManagedChannelBuilder.forTarget(properties.getQuoteApiGrpcTarget())
                 .usePlaintext()
+                .intercept(GrpcTelemetry.builder(openTelemetry).build().createClientInterceptor(), principalInterceptor)
                 .build();
     }
 
@@ -44,11 +50,8 @@ public class OriginationConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(QuoteGateway.class)
-    QuoteGateway quoteGateway(
-            QuoteServiceGrpc.QuoteServiceBlockingStub quoteStub,
-            OriginationProperties properties,
-            OpenTelemetry openTelemetry) {
-        return new GrpcQuoteGateway(quoteStub, properties.getQuoteApiGrpcTimeout(), openTelemetry);
+    QuoteGateway quoteGateway(QuoteServiceGrpc.QuoteServiceBlockingStub quoteStub, OriginationProperties properties) {
+        return new GrpcQuoteGateway(quoteStub, properties.getQuoteApiGrpcTimeout());
     }
 
     @Bean
