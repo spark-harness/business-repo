@@ -46,9 +46,12 @@ func TestTraceFilter_setsContextHeadersAndStructuredLogFields(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
 	req.Header.Set(HeaderTraceID, "trace-123")
 	req.Header.Set(HeaderCorrelationID, "corr-456")
+	ctx, span := provider.Tracer("test").Start(req.Context(), "test")
+	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
+	span.End()
 
 	if gotTraceID != "trace-123" {
 		t.Fatalf("context trace id = %q, want trace-123", gotTraceID)
@@ -181,8 +184,8 @@ func TestOutgoingGRPCContext_propagatesTraceMetadata(t *testing.T) {
 	if got := md.Get("x-correlation-id"); len(got) != 1 || got[0] != "corr-def" {
 		t.Fatalf("x-correlation-id = %#v, want corr-def", got)
 	}
-	if got := md.Get("traceparent"); len(got) != 1 || got[0] != "00-"+traceID+"-"+spanID+"-01" {
-		t.Fatalf("traceparent = %#v, want W3C trace context", got)
+	if got := md.Get("traceparent"); len(got) != 0 {
+		t.Fatalf("traceparent = %#v, want official gRPC instrumentation to inject tracing", got)
 	}
 	if got := md.Get("x-applicant-id"); len(got) != 1 || got[0] != "applicant_001" {
 		t.Fatalf("x-applicant-id = %#v, want applicant_001", got)

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.grpc.BindableService;
 import io.grpc.CallOptions;
+import io.grpc.ClientInterceptors;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -25,6 +26,7 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
 import io.opentelemetry.context.propagation.ContextPropagators;
 import io.opentelemetry.context.propagation.TextMapPropagator;
+import io.opentelemetry.instrumentation.grpc.v1_6.GrpcTelemetry;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
@@ -85,7 +87,9 @@ class GrpcServerLifecycleTest {
                 .build();
         GrpcServerLifecycle lifecycle = new GrpcServerLifecycle(
                 List.of(new TraceEchoService()),
-                List.of(new OpenTelemetryGrpcServerInterceptor(openTelemetry)),
+                List.of(
+                        GrpcTelemetry.builder(openTelemetry).build().createServerInterceptor(),
+                        new GrpcServerMetadataInterceptor()),
                 0,
                 false);
         InProcessServerBuilder builder = InProcessServerBuilder.forName(serverName).directExecutor();
@@ -94,14 +98,21 @@ class GrpcServerLifecycleTest {
         channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
         Metadata metadata = new Metadata();
         metadata.put(TRACEPARENT_METADATA_KEY, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+        AtomicReference<Metadata> responseHeaders = new AtomicReference<>();
+        AtomicReference<Metadata> responseTrailers = new AtomicReference<>();
 
         String traceId = ClientCalls.blockingUnaryCall(
-                io.grpc.ClientInterceptors.intercept(channel, io.grpc.stub.MetadataUtils.newAttachHeadersInterceptor(metadata)),
+                ClientInterceptors.intercept(
+                        channel,
+                        io.grpc.stub.MetadataUtils.newCaptureMetadataInterceptor(responseHeaders, responseTrailers),
+                        io.grpc.stub.MetadataUtils.newAttachHeadersInterceptor(metadata)),
                 TEST_METHOD,
                 CallOptions.DEFAULT,
                 "ping");
 
         assertThat(traceId).isEqualTo("4bf92f3577b34da6a3ce929d0e0e4736");
+        assertThat(responseHeaders.get().get(GrpcServerMetadataInterceptor.TRACE_ID_METADATA_KEY))
+                .isEqualTo(traceId);
     }
 
     @Test
@@ -118,7 +129,7 @@ class GrpcServerLifecycleTest {
                 .build();
         GrpcServerLifecycle lifecycle = new GrpcServerLifecycle(
                 List.of(new ThrowingService()),
-                List.of(new OpenTelemetryGrpcServerInterceptor(openTelemetry)),
+                List.of(GrpcTelemetry.builder(openTelemetry).build().createServerInterceptor()),
                 0,
                 false);
         InProcessServerBuilder builder = InProcessServerBuilder.forName(serverName).directExecutor();

@@ -14,7 +14,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/propagation"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/metadata"
 )
@@ -52,7 +51,6 @@ func WithDeploymentEnvironment(environment string) TraceFilterOption {
 }
 
 var (
-	tracer              = otel.Tracer("github.com/spark/bffkit")
 	meter               = otel.Meter("github.com/spark/bffkit")
 	httpServerRequests  metric.Int64Counter
 	httpServerDurations metric.Float64Histogram
@@ -73,22 +71,9 @@ func TraceFilter(logger AccessLogger, opts ...TraceFilterOption) khttp.FilterFun
 			start := time.Now()
 			route := routePattern(r.URL.Path)
 			operation := r.Method + " " + route
-			ctx := propagation.TraceContext{}.Extract(r.Context(), propagation.HeaderCarrier(r.Header))
-			ctx, span := tracer.Start(ctx, operation,
-				oteltrace.WithSpanKind(oteltrace.SpanKindServer),
-				oteltrace.WithAttributes(
-					attribute.String("http.request.method", r.Method),
-					attribute.String("http.route", route),
-				),
-			)
-			defer span.End()
-
-			traceID := firstNonEmpty(safeExternalCorrelationID(r.Header.Get(HeaderTraceID)), spanTraceID(span), newTraceID())
+			ctx := r.Context()
+			traceID := firstNonEmpty(safeExternalCorrelationID(r.Header.Get(HeaderTraceID)), activeTraceID(ctx), newTraceID())
 			correlationID := firstNonEmpty(safeExternalCorrelationID(r.Header.Get(HeaderCorrelationID)), traceID)
-			span.SetAttributes(
-				attribute.String("trace_id", traceID),
-				attribute.String("request_id", correlationID),
-			)
 			ctx = ContextWithTraceID(ctx, traceID)
 			ctx = ContextWithCorrelationID(ctx, correlationID)
 			ctx = ContextWithHTTPRequest(ctx, r)
@@ -107,6 +92,7 @@ func TraceFilter(logger AccessLogger, opts ...TraceFilterOption) khttp.FilterFun
 			if recorder.errorCode != "" {
 				attrs = append(attrs, attribute.String("error_code", recorder.errorCode))
 			}
+			span := oteltrace.SpanFromContext(ctx)
 			if statusCode >= http.StatusInternalServerError {
 				span.SetStatus(codes.Error, http.StatusText(statusCode))
 			}
@@ -128,8 +114,8 @@ func TraceFilter(logger AccessLogger, opts ...TraceFilterOption) khttp.FilterFun
 					"latency_ms", time.Since(start).Milliseconds(),
 				}
 				keyvals[1] = operation
-				if spanID := spanID(span); spanID != "" {
-					keyvals = append(keyvals, "span_id", spanID)
+				if spanContext := span.SpanContext(); spanContext.IsValid() {
+					keyvals = append(keyvals, "span_id", spanContext.SpanID().String())
 				}
 				if environment := config.deploymentEnvironment; environment != "" {
 					keyvals = append(keyvals, "deployment.environment", environment)
@@ -202,8 +188,6 @@ func HTTPRequestFromContext(ctx context.Context) (*http.Request, bool) {
 func OutgoingGRPCContext(ctx context.Context) context.Context {
 	traceID, _ := TraceIDFromContext(ctx)
 	correlationID, _ := CorrelationIDFromContext(ctx)
-	carrier := propagation.MapCarrier{}
-	otel.GetTextMapPropagator().Inject(ctx, carrier)
 	kvs := make([]string, 0, 4)
 	if traceID != "" {
 		kvs = append(kvs, strings.ToLower(HeaderTraceID), traceID)
@@ -214,32 +198,18 @@ func OutgoingGRPCContext(ctx context.Context) context.Context {
 	if principal, ok := PrincipalFromContext(ctx); ok {
 		kvs = append(kvs, strings.ToLower(HeaderApplicantID), principal.ApplicantID)
 	}
-	if traceparent := carrier.Get("traceparent"); traceparent != "" {
-		kvs = append(kvs, "traceparent", traceparent)
-	}
-	if tracestate := carrier.Get("tracestate"); tracestate != "" {
-		kvs = append(kvs, "tracestate", tracestate)
-	}
 	if len(kvs) == 0 {
 		return ctx
 	}
 	return metadata.AppendToOutgoingContext(ctx, kvs...)
 }
 
-func spanTraceID(span oteltrace.Span) string {
-	spanContext := span.SpanContext()
+func activeTraceID(ctx context.Context) string {
+	spanContext := oteltrace.SpanContextFromContext(ctx)
 	if !spanContext.IsValid() {
 		return ""
 	}
 	return spanContext.TraceID().String()
-}
-
-func spanID(span oteltrace.Span) string {
-	spanContext := span.SpanContext()
-	if !spanContext.IsValid() {
-		return ""
-	}
-	return spanContext.SpanID().String()
 }
 
 func firstNonEmpty(values ...string) string {

@@ -9,6 +9,7 @@ import (
 
 	applicantv1pb "github.com/spark-harness/idl-go-repo/vesta/lendora/applicant/v1"
 	"github.com/spark/bffkit"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -109,11 +110,9 @@ func TestApplicantAuthClient_SendOtpPropagatesTraceMetadata(t *testing.T) {
 	provider := sdktrace.NewTracerProvider()
 	originalProvider := otel.GetTracerProvider()
 	otel.SetTracerProvider(provider)
-	applicantTracer = otel.Tracer("github.com/spark/fides-bff/internal/data")
 	t.Cleanup(func() {
 		_ = provider.Shutdown(context.Background())
 		otel.SetTracerProvider(originalProvider)
-		applicantTracer = otel.Tracer("github.com/spark/fides-bff/internal/data")
 	})
 	ctx := oteltrace.ContextWithSpanContext(context.Background(), oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
 		TraceID:    parsedTraceID,
@@ -305,5 +304,8 @@ func (r staticResolver) Resolve(context.Context) (string, error) {
 }
 
 func testDialOptions() []grpc.DialOption {
-	return []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	return []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	}
 }
